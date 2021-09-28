@@ -43,7 +43,6 @@ def calcError(row):
     return pd.Series(item_df,
                      index=['var_score_q', 'mse_q', 'mae_q', 'mape_q', 'var_score_h', 'mse_h', 'mae_h', 'mape_h'])
 
-
 class Ensemble:
     def __init__(self, mode, model_kind, sigma_lst=[1, 2, 3], default_n=20, epoch_num=2, epoch_min=100, epoch_step=50, **kwargs):
         self.mode = mode
@@ -104,6 +103,7 @@ class Ensemble:
                                               cols_y=self.cols_y,
                                               cols_gt=self.cols_gt,
                                               mode=self.norm_method)
+            self.plot_data_processed(x, y)
             if true_t_timestep != 1:
                 _, y_true, _, y_gt = extract_data(dataframe=dat,
                                                   window_size=self.window_size,
@@ -153,6 +153,15 @@ class Ensemble:
 
         data['scaler'] = scaler
         return data
+
+    def plot_data_processed(self, x, y):
+        fig, (ax1, ax2) = plt.subplots(2,1, figsize=(5,7))
+        ax1.plot(len(y), y[:, 0])
+        ax1.set(xlabel='num', ylabel='H')
+        ax2.plot(len(y), y[:, 1])
+        ax2.set(xlabel='num', ylabel='Q')
+        
+        plt.show()
 
     def build_model_inner(self):
         if self.model_kind == 'rnn_cnn':
@@ -230,7 +239,7 @@ class Ensemble:
         self.data_out_generate(x_train_out, x_test_out)
 
     def predict_in(self, data=[]):
-        if data == []:
+        if len(data) == 0:
             if self.model_kind == 'rnn_cnn':
                 x_train_out = self.inner_model.predict(self.data['x_test_in'])
                 x_test_out = self.inner_model.predict(self.data['x_test_out'])
@@ -518,7 +527,7 @@ if __name__ == '__main__':
         # model.retransform_prediction()
         # model.evaluate_model()
     elif args.mode == "test":
-        model = Ensemble(args.mode, args.model, sigma_lst=[
+        model = Ensemble(args.mode, args.model, sigma_lst=[0,
                          1, 2, 3], default_n=20, epoch_num=4, epoch_min=100, epoch_step=50, **config)
         model.train_model_outer()
         # model.roll_prediction()
