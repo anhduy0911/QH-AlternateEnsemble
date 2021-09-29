@@ -16,17 +16,19 @@ data:
   window_size: 30
   target_timestep: 1
 model:
-  epoch_min: 100
-  epoch_num: 4
-  epoch_max: 250
-  epoch_step: 50
+  child: 
+    epoch: 
+      - 100
+      - 150
+      - 200
+      - 250
+    dropout: 0
   epochs_out: 400
   in_dim: 2
   out_dim: 2
   patience: 50
   batch_size: 128
-  dropout: 0
 
 ssa:
   default_n: 20 # default window size
-  sigma_lst: [1,2,3] #default_sigma_lst
+  sigma_lst: [0,1,2,3,4,5,6,7,8] #default_sigma_lst

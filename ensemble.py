@@ -44,7 +44,8 @@ def calcError(row):
                      index=['var_score_q', 'mse_q', 'mae_q', 'mape_q', 'var_score_h', 'mse_h', 'mae_h', 'mape_h'])
 
 class Ensemble:
-    def __init__(self, mode, model_kind, sigma_lst=[1, 2, 3], default_n=20, epoch_num=2, epoch_min=100, epoch_step=50, **kwargs):
+    def __init__(self, mode, model_kind, child_option, **kwargs):
+        print(child_option)
         self.mode = mode
         self.model_kind = model_kind
 
@@ -64,18 +65,14 @@ class Ensemble:
         self.norm_method = self._data_kwargs.get('norm_method')
 
         self.batch_size = self._model_kwargs.get('batch_size')
-        self.epoch_min = epoch_min
-        self.epoch_num = epoch_num
-        self.epoch_step = epoch_step
-        self.epoch_max = self.epoch_min + (epoch_num - 1) * epoch_step
         self.epochs_out = self._model_kwargs.get('epochs_out')
         self.input_dim = self._model_kwargs.get('in_dim')
         self.output_dim = self._model_kwargs.get('out_dim')
         self.patience = self._model_kwargs.get('patience')
         self.dropout = self._model_kwargs.get('dropout')
 
-        self.sigma_lst = sigma_lst
-        self.default_n = default_n
+        self.sigma_lst = self._ssa_kwargs['sigma_lst']
+        self.default_n = self._ssa_kwargs['default_n']
 
         self.data = self.generate_data()
         self.inner_model = self.build_model_inner()
@@ -103,7 +100,6 @@ class Ensemble:
                                               cols_y=self.cols_y,
                                               cols_gt=self.cols_gt,
                                               mode=self.norm_method)
-            self.plot_data_processed(x, y)
             if true_t_timestep != 1:
                 _, y_true, _, y_gt = extract_data(dataframe=dat,
                                                   window_size=self.window_size,
@@ -156,12 +152,12 @@ class Ensemble:
 
     def plot_data_processed(self, x, y):
         fig, (ax1, ax2) = plt.subplots(2,1, figsize=(5,7))
-        ax1.plot(len(y), y[:, 0])
+        ax1.plot(range(len(y)), y[:, 0])
         ax1.set(xlabel='num', ylabel='H')
-        ax2.plot(len(y), y[:, 1])
+        ax2.plot(range(len(y)), y[:, 1])
         ax2.set(xlabel='num', ylabel='Q')
         
-        plt.show()
+        plt.savefig('./log/data.png')
 
     def build_model_inner(self):
         if self.model_kind == 'rnn_cnn':
@@ -383,8 +379,11 @@ class Ensemble:
         for ind in range(len(self.data['x_test_out']) - 7):
             x = self.data['x_test_out'][ind]
             gt = []
+            print(f'input: {x.shape}')
             res0_sub = self.predict_in(data=x[np.newaxis, :])
+            print(f'result submodel: {res0_sub.shape}')
             res0 = self.outer_model.predict(x=[res0_sub[np.newaxis, :], x[np.newaxis, :]], batch_size=1)
+            print(f'result model: {res0.shape}')
             x = x.tolist()
             x.append(res0.reshape(self.output_dim).tolist())
             gt.append(self.data['y_gt_test_out'][ind])
@@ -402,6 +401,15 @@ class Ensemble:
         gtruth = np.array(gtruth)
         print(f'RESULT SHAPE: {result.shape}')
         print(f'GTRUTH SHAPE: {gtruth.shape}')
+
+        fig, (ax1, ax2) = plt.subplots(2,1, figsize=(5,7))
+        ax1.plot(range(len(gtruth[:,0,0])), gtruth[:,0,0])
+        ax1.set(xlabel='num', ylabel='H')
+        ax2.plot(range(len(gtruth[:,0,1])), gtruth[:,0,1])
+        ax2.set(xlabel='num', ylabel='Q')
+        
+        plt.savefig('./log/data_pred.png')
+
         return result, gtruth
 
     def retransform_prediction(self, mode=''):
@@ -517,22 +525,23 @@ if __name__ == '__main__':
 
     np.random.seed(69)
 
+    
     with open('./settings/model/config.yaml', 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
+    with open('./settings/model/child_default.yaml', 'r') as f:
+        child_config = yaml.load(f, Loader=yaml.FullLoader)
     if args.mode == 'train' or args.mode == 'train-inner' or args.mode == 'train-outer':
-        model = Ensemble(args.mode, args.model, sigma_lst=[
-                         1, 2, 3], default_n=20, epoch_num=4, epoch_min=100, epoch_step=50, **config)
-        model.train_model_outer()
+        model = Ensemble(args.mode, args.model, child_config, **config)
+        # model.train_model_outer()
         # model.roll_prediction()
         # model.retransform_prediction()
         # model.evaluate_model()
     elif args.mode == "test":
-        model = Ensemble(args.mode, args.model, sigma_lst=[0,
-                         1, 2, 3], default_n=20, epoch_num=4, epoch_min=100, epoch_step=50, **config)
+        model = Ensemble(args.mode, args.model, **config)
         model.train_model_outer()
-        # model.roll_prediction()
-        model.retransform_prediction(mode='roll')
-        model.evaluate_model(mode='roll')
+        model.roll_prediction()
+        # model.retransform_prediction(mode='roll')
+        # model.evaluate_model(mode='roll')
         # model.evaluate_model_by_month()
     else:
         raise RuntimeError('Mode must be train or test!')

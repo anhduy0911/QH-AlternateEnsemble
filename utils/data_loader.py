@@ -14,7 +14,6 @@ def get_input_data(input_file, default_n, sigma_lst):
     dat = pd.read_csv(input_file, header=0)
     Q = dat['Q'].to_list()
     H = dat['H'].to_list()
-
     # print(Q[:5])
     # print(H[:5])
     lst_H_ssa = SSA(H, default_n)

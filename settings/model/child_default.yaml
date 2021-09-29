@@ -1,0 +1,15 @@
+rnn_cnn:
+  epoch: 200
+  drop_out: 0.05 
+  conv: 
+    n_kernels: 
+      - 16
+      - 32
+      - 64
+    kernel_s: 
+      - 7
+      - 5
+      - 3
+  lstm: 
+    bi_unit: 64
+    si_unit: 128
