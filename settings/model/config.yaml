@@ -29,12 +29,13 @@ model:
       - 0
       - 0
       - 0
+    batch_size: [128, 128, 128, 128]
   epochs_out: 400
   in_dim: 2
   out_dim: 2
   patience: 50
-  batch_size: [128, 128, 128, 128]
-
+  batch_size: 128
+  dropout: 0
 ssa:
   default_n: 20 # default window size
   sigma_lst: [0,1,2,3,4,5,6,7,8] #default_sigma_lst

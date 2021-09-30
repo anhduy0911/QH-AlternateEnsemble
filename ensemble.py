@@ -150,7 +150,7 @@ class Ensemble:
         for i in range(self.child_config['num']):
             if self.model_kind == 'rnn_cnn':
                 from model.models.multi_rnn_cnn import model_builder
-                model = model_builder(i, self.input_dim, self.output_dim, self.window_size, self.target_timestep, self.child_config)
+                model = model_builder(i, self.child_config, self.input_dim, self.output_dim, self.window_size, self.target_timestep)
                 models.append(model)
 
         return models
@@ -173,7 +173,7 @@ class Ensemble:
                     self.inner_models[i], _ = train_model(self.inner_models[i], i, 
                                                       self.data['x_train_in'],
                                                       self.data['y_train_in'],
-                                                      self.batch_size[i],
+                                                      self.child_config['batch_size'][i],
                                                       self.child_config['epoch'][i],
                                                       save_dir=self.log_dir + 'ModelPool/')
 
@@ -199,14 +199,14 @@ class Ensemble:
         if len(data) == 0: # this case for gen train data
             if self.model_kind == 'rnn_cnn':
                 x_train_out = self.inner_models[index].predict(self.data['x_test_in'])
-                x_test_out = self.inner_model[index].predict(self.data['x_test_out'])
+                x_test_out = self.inner_models[index].predict(self.data['x_test_out'])
            
             return x_train_out, x_test_out
         else: # this case when gen data during evaluation
             x_test_out = np.zeros((self.child_config['num'], self.output_dim))
             for ind in range(self.child_config['num']):
                 self.inner_models[ind].load_weights(self.log_dir + f'ModelPool/best_model_{ind}.hdf5')
-                x_test_out[ind, :] = self.inner_model.predict(data, batch_size=1)
+                x_test_out[ind, :] = self.inner_models[ind].predict(data, batch_size=1)
            
             # here if apply attention then should not flatten out
             x_test_out = x_test_out.reshape(1, -1)
@@ -260,6 +260,7 @@ class Ensemble:
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
         model.compile(loss='mse', optimizer='adam', metrics=['mae', 'mape'])
 
+        model.summary()
         return model
 
     def train_model_outer(self):
@@ -317,19 +318,19 @@ class Ensemble:
         for ind in range(len(self.data['x_test_out']) - self.time_step_eval):
             x = self.data['x_test_out'][ind]
             gt = []
-            print(f'input: {x.shape}')
+            # print(f'input: {x.shape}')
 
             # gen data from child models
             res0_sub = self.predict_in(data=x[np.newaxis, :])
-            print(f'result submodel: {res0_sub.shape}')
+            # print(f'result submodel: {res0_sub.shape}')
             res0 = self.outer_model.predict(x=[res0_sub[np.newaxis, :], x[np.newaxis, :]], batch_size=1)
-            print(f'result model: {res0.shape}')
+            # print(f'result model: {res0.shape}')
             x = x.tolist()
             x.append(res0.reshape(self.output_dim).tolist())
             gt.append(self.data['y_gt_test_out'][ind])
 
             for i in range(1, self.time_step_eval):
-                res_sub = self.predict_in(np.array(x[-self.window_size:])[np.newaxis, :])
+                res_sub = self.predict_in(data=np.array(x[-self.window_size:])[np.newaxis, :])
                 res = self.outer_model.predict(
                     x=[res_sub[np.newaxis, :], np.array(x[-self.window_size:])[np.newaxis, :]], batch_size=1)
                 gt.append(self.data['y_gt_test_out'][ind + i])
@@ -452,7 +453,7 @@ if __name__ == '__main__':
         model.retransform_prediction()
         model.evaluate_model()
     elif args.mode == "test":
-        model = Ensemble(args.mode, args.model, **config)
+        model = Ensemble(args.mode, args.model, child_config, **config)
         model.train_model_outer()
         model.retransform_prediction()
         model.evaluate_model()

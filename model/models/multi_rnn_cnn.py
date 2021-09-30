@@ -3,7 +3,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.optimizers import Adam, Adadelta, RMSprop
 
-def model_builder(index, input_dim=2, output_dim=2, window_size=30, target_timestep=1, **opt):
+def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_timestep=1):
     ''' 
     build the (index)th child model base on given param set
     '''
@@ -20,14 +20,14 @@ def model_builder(index, input_dim=2, output_dim=2, window_size=30, target_times
     conv_out_3 = conv_3(conv_out_2)
 
     rnn_1 = Bidirectional(
-        LSTM(units=opt['bi_unit'][index], return_sequences=True, return_state=True, 
+        LSTM(units=opt['lstm']['bi_unit'][index], return_sequences=True, return_state=True, 
             dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index]))
 
     rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(conv_out_3)
     state_h = Concatenate(axis=-1)([forward_h, backward_h])
     state_c = Concatenate(axis=-1)([forward_c, backward_c])
 
-    rnn_3 = LSTM(units=opt['si_unit'][index], return_sequences=False, return_state=False, 
+    rnn_3 = LSTM(units=opt['lstm']['si_unit'][index], return_sequences=False, return_state=False, 
                 dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
     rnn_out_3 = rnn_3(rnn_out_1, initial_state=[state_h, state_c])
 
