@@ -9,6 +9,7 @@ import os
 import argparse
 import yaml
 import tensorflow.keras.backend as K
+import tensorflow as tf
 from utils.ssa import SSA
 from utils.reprocess_daily import extract_data, ed_extract_data, roll_data
 from utils.data_loader import get_input_data
@@ -45,9 +46,9 @@ def calcError(row):
 
 class Ensemble:
     def __init__(self, mode, model_kind, child_option, **kwargs):
-        print(child_option)
         self.mode = mode
         self.model_kind = model_kind
+        self.child_config = self.merge_child_config(child_option[self.model_kind], kwargs['model']['child'])
 
         self.log_dir = kwargs.get('log_dir')
         self._data_kwargs = kwargs.get('data')
@@ -63,6 +64,7 @@ class Ensemble:
         self.target_timestep = self._data_kwargs.get('target_timestep')
         self.window_size = self._data_kwargs.get('window_size')
         self.norm_method = self._data_kwargs.get('norm_method')
+        self.time_step_eval = self._data_kwargs.get('time_step_eval')
 
         self.batch_size = self._model_kwargs.get('batch_size')
         self.epochs_out = self._model_kwargs.get('epochs_out')
@@ -75,14 +77,27 @@ class Ensemble:
         self.default_n = self._ssa_kwargs['default_n']
 
         self.data = self.generate_data()
-        self.inner_model = self.build_model_inner()
+        self.inner_models = self.build_model_inner()
         self.outer_model = self.build_model_outer()
 
-    def generate_data(self, true_t_timestep=1):
+    def merge_child_config(self, default_setting, override_setting):
+        ''' Merge 2 dictionary for config of child models, 
+            the 1st dict is the default for all,
+            the 2nd for override setting for making differences between childs
+        '''
+        for k, v in override_setting.items():
+            default_setting[k] = v
+        print(default_setting)
+        return default_setting
+
+    def generate_data(self):
+        '''
+        Prepare train-val-test set
+        train_in: data use for train child models
+        test_in: data use for TRAIN main model
+        test_out: data use for actual test of the total system 
+        '''
         dat = get_input_data(self.data_file, self.default_n, self.sigma_lst)
-        # dat = getSSAData(self.data_file, 20, [1,2,3]) # thay doi trong config
-        #dat_q = pd.read_csv('./RawData/Kontum-daily.csv', header=0, index_col=0)
-        #gen_dat = gen_dat.to_numpy()
         dat = dat.to_numpy()
 
         data = {}
@@ -90,7 +105,6 @@ class Ensemble:
 
         test_outer = int(dat.shape[0] * self.dt_split_point_outer)
         train_inner = int((dat.shape[0] - test_outer) * (1 - self.dt_split_point_inner))
-        #train_outer = dat.shape[0] - train_inner - test_outer
 
         if self.model_kind == 'rnn_cnn':
             x, y, scaler, y_gt = extract_data(dataframe=dat,
@@ -100,17 +114,7 @@ class Ensemble:
                                               cols_y=self.cols_y,
                                               cols_gt=self.cols_gt,
                                               mode=self.norm_method)
-            if true_t_timestep != 1:
-                _, y_true, _, y_gt = extract_data(dataframe=dat,
-                                                  window_size=self.window_size,
-                                                  target_timstep=true_t_timestep,
-                                                  cols_x=self.cols_x,
-                                                  cols_y=self.cols_y,
-                                                  cols_gt=self.cols_gt,
-                                                  mode=self.norm_method)
-                y_test_out_true = y[-test_outer:]
-                return y_test_out_true
-
+            
             x_train_in, y_train_in, y_gt_train_in = x[:train_inner, :], y[:train_inner, :], y_gt[:train_inner, :]
             x_test_in, y_test_in, y_gt_test_in = x[train_inner:-test_outer, :], y[train_inner:-test_outer, :], y_gt[
                 train_inner:-test_outer, :]
@@ -123,34 +127,13 @@ class Ensemble:
                 data["y_" + cat] = y
                 data["y_gt_" + cat] = y_gt
 
-        elif self.model_kind == 'en_de':
-            en_x, de_x, de_y, scaler = ed_extract_data(dataframe=dat,
-                                                       window_size=self.window_size,
-                                                       target_timstep=self.target_timestep,
-                                                       cols_x=self.cols_x,
-                                                       cols_y=self.cols_y,
-                                                       mode=self.norm_method)
-
-            en_x_train_in, de_x_train_in, y_train_in = en_x[:train_inner, :], de_x[:
-                                                                                   train_inner, :], de_y[:
-                                                                                                         train_inner, :]
-            en_x_test_in, de_x_test_in, y_test_in = en_x[train_inner:-test_outer, :], de_x[
-                train_inner:-test_outer, :], de_y[train_inner:-test_outer, :]
-            en_x_test_out, de_x_test_out, y_test_out = en_x[-test_outer:, :], de_x[-test_outer:, :], de_y[
-                -test_outer:, :]
-
-            for cat in ["train_in", "test_in", "test_out"]:
-                en_x, de_x, de_y = locals()["en_x_" + cat], locals()["de_x_" + cat], locals()["y_" + cat]
-                print(cat, "en_x: ", en_x.shape, "de_x: ", de_x.shape, "de_y: ", de_y.shape)
-                data["en_x_" + cat] = en_x
-                data["de_x_" + cat] = de_x
-                data["y_" + cat] = de_y
-        #data['y_train_out'] = data['y_test_in']
-
         data['scaler'] = scaler
         return data
 
     def plot_data_processed(self, x, y):
+        '''
+        use to plot the data after processed - not important
+        '''
         fig, (ax1, ax2) = plt.subplots(2,1, figsize=(5,7))
         ax1.plot(range(len(y)), y[:, 0])
         ax1.set(xlabel='num', ylabel='H')
@@ -160,119 +143,99 @@ class Ensemble:
         plt.savefig('./log/data.png')
 
     def build_model_inner(self):
-        if self.model_kind == 'rnn_cnn':
-            from model.models.multi_rnn_cnn import model_builder
-            model = model_builder(self.input_dim, self.output_dim, self.window_size, self.target_timestep, self.dropout)
-            model.save_weights(self.log_dir + 'ModelPool/init_model.hdf5')
-        elif self.model_kind == 'en_de':
-            from model.models.en_de import model_builder
-            model = model_builder(self.input_dim, self.output_dim, self.target_timestep, self.dropout)
-            model.save_weights(self.log_dir + 'ModelPool/init_model.hdf5')
-        return model
+        '''
+        func to build the child models
+        '''
+        models = []
+        for i in range(self.child_config['num']):
+            if self.model_kind == 'rnn_cnn':
+                from model.models.multi_rnn_cnn import model_builder
+                model = model_builder(i, self.input_dim, self.output_dim, self.window_size, self.target_timestep, self.child_config)
+                models.append(model)
+
+        return models
 
     def train_model_inner(self):
+        '''
+        function for train the child models
+        '''
+
+        #prepare train data for main model, which is the result of child models
         train_shape = self.data['y_test_in'].shape
         test_shape = self.data['y_test_out'].shape
-        # print(train_shape)
-        # print(test_shape)
-        step = int((self.epoch_max - self.epoch_min) / self.epoch_step) + 1
-        self.data['sub_model'] = step
-
-        x_train_out = np.zeros(shape=(train_shape[0], self.target_timestep, step, train_shape[1]))
-        x_test_out = np.zeros(shape=(test_shape[0], self.target_timestep, step, test_shape[1]))
-        j = 0  # submodel index
-
-        lst_epoch_size = get_epoch_size_list(self.epoch_num, self.epoch_min, self.epoch_step)
+        x_train_out = np.zeros(shape=(train_shape[0], self.target_timestep, self.child_config['num'], train_shape[1]))
+        x_test_out = np.zeros(shape=(test_shape[0], self.target_timestep, self.child_config['num'], test_shape[1]))
 
         if (self.mode == 'train' or self.mode == 'train-inner'):
-            from model.models.en_de import train_model as ed_train
-            for epoch in lst_epoch_size:
-                # for epoch in range(self.epoch_min, self.epoch_max + 1, self.epoch_step):
-                self.inner_model.load_weights(self.log_dir + 'ModelPool/init_model.hdf5')
-
+            for i in range(self.child_config['num']):
                 if self.model_kind == 'rnn_cnn':
                     from model.models.multi_rnn_cnn import train_model
-                    self.inner_model, _ = train_model(self.inner_model,
+                    self.inner_models[i], _ = train_model(self.inner_models[i], i, 
                                                       self.data['x_train_in'],
                                                       self.data['y_train_in'],
-                                                      self.batch_size,
-                                                      epoch,
+                                                      self.batch_size[i],
+                                                      self.child_config['epoch'][i],
                                                       save_dir=self.log_dir + 'ModelPool/')
-                elif self.model_kind == 'en_de':
-                    from model.models.en_de import train_model
-                    self.inner_model, _ = train_model(self.inner_model,
-                                                      self.data['en_x_train_in'],
-                                                      self.data['de_x_train_in'],
-                                                      self.data['y_train_in'],
-                                                      self.batch_size,
-                                                      epoch,
-                                                      save_dir=self.log_dir + 'ModelPool/')
-                train, test = self.predict_in()
-                # x_train_out = pd.concat([x_train_out,train],axis=1)
-                # x_test_out = pd.concat([x_test_out,test],axis=1)
-                print(train.shape)
-                for i in range(self.target_timestep):
-                    x_train_out[:, i, j, :] = train[:, :]
-                    x_test_out[:, i, j, :] = test[:, :]
-                j += 1
+
+                # gen train data for main model with prediction of i-th child
+                train, test = self.predict_in(i)
+                for k in range(self.target_timestep):
+                    x_train_out[:, k, i, :] = train
+                    x_test_out[:, k, i, :] = test
         else:
-            for epoch in lst_epoch_size:
+            for i in range(self.child_config['num']):
                 # for epoch in range(self.epoch_min, self.epoch_max + 1, self.epoch_step):
                 if self.model_kind == 'rnn_cnn':
-                    self.inner_model.load_weights(self.log_dir + f'ModelPool/best_model_{epoch}.hdf5')
-                    train, test = self.predict_in()
-                elif self.model_kind == 'en_de':
-                    self.inner_model.load_weights(self.log_dir + f'ModelPool/ed_best_model_{epoch}.hdf5')
-                    train, test = self.predict_in()
-                # x_train_out = pd.concat([x_train_out,train],axis=1)
-                # x_test_out = pd.concat([x_test_out,test],axis=1)
-
-                for i in range(self.target_timestep):
-                    x_train_out[:, i, j, :] = train[:, :]
-                    x_test_out[:, i, j, :] = test[:, :]
-                j += 1
+                    self.inner_models[i].load_weights(self.log_dir + f'ModelPool/best_model_{i}.hdf5')
+                
+                train, test = self.predict_in(i)
+                for k in range(self.target_timestep):
+                    x_train_out[:, k, i, :] = train
+                    x_test_out[:, k, i, :] = test
 
         self.data_out_generate(x_train_out, x_test_out)
 
-    def predict_in(self, data=[]):
-        if len(data) == 0:
+    def predict_in(self, index=0, data=[]):
+        if len(data) == 0: # this case for gen train data
             if self.model_kind == 'rnn_cnn':
-                x_train_out = self.inner_model.predict(self.data['x_test_in'])
-                x_test_out = self.inner_model.predict(self.data['x_test_out'])
-            elif self.model_kind == 'en_de':
-                x_train_out = self.inner_model.predict([self.data['en_x_test_in'], self.data['de_x_test_in']])
-                x_test_out = self.inner_model.predict([self.data['en_x_test_out'], self.data['de_x_test_out']])
+                x_train_out = self.inner_models[index].predict(self.data['x_test_in'])
+                x_test_out = self.inner_model[index].predict(self.data['x_test_out'])
+           
             return x_train_out, x_test_out
-        else:
-            num_sub = (self.epoch_max - self.epoch_min) / self.epoch_step + 1
-            x_test_out = np.zeros((int(num_sub), self.output_dim))
-            for ind, epoch in enumerate(range(self.epoch_min, self.epoch_max + 1, self.epoch_step)):
-                if self.model_kind == 'rnn_cnn':
-                    self.inner_model.load_weights(self.log_dir + f'ModelPool/best_model_{epoch}.hdf5')
-                    x_test_out[ind, :] = self.inner_model.predict(data, batch_size=1)
-                elif self.model_kind == 'en_de':
-                    self.inner_model.load_weights(self.log_dir + f'ModelPool/ed_best_model_{epoch}.hdf5')
-                    x_test_out[ind, :] = self.inner_model.predict(data, batch_size=1)
+        else: # this case when gen data during evaluation
+            x_test_out = np.zeros((self.child_config['num'], self.output_dim))
+            for ind in range(self.child_config['num']):
+                self.inner_models[ind].load_weights(self.log_dir + f'ModelPool/best_model_{ind}.hdf5')
+                x_test_out[ind, :] = self.inner_model.predict(data, batch_size=1)
+           
+            # here if apply attention then should not flatten out
             x_test_out = x_test_out.reshape(1, -1)
-            # print(f'X TEST OUT SHAPE: {x_test_out.shape}')
             return x_test_out
 
     def data_out_generate(self, x_train_out, x_test_out):
+        '''
+        retransform the dimension of outputs from submodels to use as the training data for main model
+        '''
+        # this flatten all output of submodel, should not do this when applying attention
         shape = x_train_out.shape
-        self.data['x_train_out'] = x_train_out.reshape(shape[0], shape[1], -1)
-        print(self.data['x_train_out'].shape)
-        self.data['y_train_out'] = self.data['y_test_in']  # .reshape(-3,self.target_timestep * self.output_dim)
+        self.data['x_train_out_submodel'] = x_train_out.reshape(shape[0], shape[1], -1) 
+        print(self.data['x_train_out_submodel'].shape)
+        self.data['y_train_out'] = self.data['y_test_in'] 
+
         shape = x_test_out.shape
         self.data['x_test_out_submodel'] = x_test_out.reshape(shape[0], shape[1], -1)
-        self.data['y_test_out'] = self.data['y_test_out']  # .reshape(-3,self.target_timestep * self.output_dim)
+        self.data['y_test_out'] = self.data['y_test_out'] 
 
-    # TODO: change to multiple timestep
     def build_model_outer(self):
+        '''
+        build main model - Modify this for attention mechanism
+        '''
         self.train_model_inner()
-        in_shape = self.data['x_train_out'].shape
+        in_shape = self.data['x_train_out_submodel'].shape
         print(f'Input shape: {in_shape}')
 
-        input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.data['sub_model']))
+        #modify the dim here
+        input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
         input_val_x = Input(shape=(self.window_size, self.input_dim))
 
         rnn_1 = Bidirectional(
@@ -300,6 +263,9 @@ class Ensemble:
         return model
 
     def train_model_outer(self):
+        '''
+        func for train the main model
+        '''
         if (self.mode == 'train' or self.mode == 'train-outer'):
             from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 
@@ -315,20 +281,12 @@ class Ensemble:
             callbacks.append(early_stop)
             callbacks.append(checkpoint)
 
-            if self.model_kind == 'rnn_cnn':
-                history = self.outer_model.fit(x=[self.data['x_train_out'], self.data['x_test_in']],
-                                               y=self.data['y_train_out'],
-                                               batch_size=self.batch_size,
-                                               epochs=self.epochs_out,
-                                               callbacks=callbacks,
-                                               validation_split=0.1)
-            elif self.model_kind == 'en_de':
-                history = self.outer_model.fit(x=[self.data['x_train_out'], self.data['en_x_test_in']],
-                                               y=self.data['y_train_out'],
-                                               batch_size=self.batch_size,
-                                               epochs=self.epochs_out,
-                                               callbacks=callbacks,
-                                               validation_split=0.1)
+            history = self.outer_model.fit(x=[self.data['x_train_out_submodel'], self.data['x_test_in']],
+                                            y=self.data['y_train_out'],
+                                            batch_size=self.batch_size,
+                                            epochs=self.epochs_out,
+                                            callbacks=callbacks,
+                                            validation_split=0.1)
 
             if history is not None:
                 self.plot_training_history(history)
@@ -337,12 +295,11 @@ class Ensemble:
             self.outer_model.load_weights(self.log_dir + 'best_model.hdf5')
             print('Load weight from ' + self.log_dir)
 
-        # from keras.utils.vis_utils import plot_model
-        # import os
-        # os.environ["PATH"] += os.pathsep + 'D:/Graphviz2.38/bin/'
-        # plot_model(model=self.outer_model, to_file=self.log_dir + 'model.png', show_shapes=True)
 
     def plot_training_history(self, history):
+        '''
+        plot training phase
+        '''
         fig = plt.figure(figsize=(10, 6))
         # fig.add_subplot(121)
         plt.plot(history.history['loss'], label='loss')
@@ -351,35 +308,18 @@ class Ensemble:
 
         plt.savefig(self.log_dir + 'training_phase.png')
 
-    def predict_and_plot(self):
-        # x_extract_by_day = self.data['x_test_out_submodel'][:, 0, :, :]
-        if self.model_kind == 'rnn_cnn':
-            results = self.outer_model.predict(x=[self.data['x_test_out_submodel'], self.data['x_test_out']])
-        elif self.model_kind == 'en_de':
-            results = self.outer_model.predict(x=[self.data['x_test_out_submodel'], self.data['en_x_test_out']])
-        print(f'The output shape: {results.shape}')
-
-        fig = plt.figure(figsize=(10, 6))
-        fig.add_subplot(121)
-        plt.plot(self.data['y_test_out'][:, 0, 0], label='ground_truth_Q')
-        plt.plot(results[:, 0, 0], label='predict_Q')
-        plt.legend()
-
-        fig.add_subplot(122)
-        plt.plot(self.data['y_test_out'][:, 0, 1], label='ground_truth_H')
-        plt.plot(results[:, 0, 1], label='predict_H')
-        plt.legend()
-
-        plt.savefig(self.log_dir + 'predict.png')
-        return results
-
     def roll_prediction(self):
+        '''
+        Roll prediction to the actual target timestep
+        '''
         result = []
         gtruth = []
-        for ind in range(len(self.data['x_test_out']) - 7):
+        for ind in range(len(self.data['x_test_out']) - self.time_step_eval):
             x = self.data['x_test_out'][ind]
             gt = []
             print(f'input: {x.shape}')
+
+            # gen data from child models
             res0_sub = self.predict_in(data=x[np.newaxis, :])
             print(f'result submodel: {res0_sub.shape}')
             res0 = self.outer_model.predict(x=[res0_sub[np.newaxis, :], x[np.newaxis, :]], batch_size=1)
@@ -387,14 +327,15 @@ class Ensemble:
             x = x.tolist()
             x.append(res0.reshape(self.output_dim).tolist())
             gt.append(self.data['y_gt_test_out'][ind])
-            for i in range(1, 7):
+
+            for i in range(1, self.time_step_eval):
                 res_sub = self.predict_in(np.array(x[-self.window_size:])[np.newaxis, :])
                 res = self.outer_model.predict(
                     x=[res_sub[np.newaxis, :], np.array(x[-self.window_size:])[np.newaxis, :]], batch_size=1)
                 gt.append(self.data['y_gt_test_out'][ind + i])
                 x.append(res.reshape(self.output_dim).tolist())
 
-            result.append(x[-7:])
+            result.append(x[-self.time_step_eval:])
             gtruth.append(gt)
 
         result = np.array(result)
@@ -402,60 +343,45 @@ class Ensemble:
         print(f'RESULT SHAPE: {result.shape}')
         print(f'GTRUTH SHAPE: {gtruth.shape}')
 
-        fig, (ax1, ax2) = plt.subplots(2,1, figsize=(5,7))
-        ax1.plot(range(len(gtruth[:,0,0])), gtruth[:,0,0])
-        ax1.set(xlabel='num', ylabel='H')
-        ax2.plot(range(len(gtruth[:,0,1])), gtruth[:,0,1])
-        ax2.set(xlabel='num', ylabel='Q')
-        
-        plt.savefig('./log/data_pred.png')
-
         return result, gtruth
 
-    def retransform_prediction(self, mode=''):
-        if mode == '':
-            result = self.predict_and_plot()
-        else:
-            result, y_test = self.roll_prediction()
+    def retransform_prediction(self):
+        '''
+        func for convert the prediction to initial scale
+        '''
+        result, y_test = self.roll_prediction()
         mask = np.zeros(self.data['shape'])
-        test_shape = self.data['y_gt_test_out'].shape[0] - 7
+        test_shape = self.data['y_gt_test_out'].shape[0] - self.time_step_eval
 
         lst_full_date = pd.read_csv(self.data_file)['date'].tolist()
-        # lst_test_date = lst_full_date[int(len(lst_full_date) * (1- self.dt_split_point_outer) - 1) : ]
+        len_df = int(len(lst_full_date) * (1 - self.dt_split_point_outer) - 1)
 
-        for i in range(self.target_timestep if mode == '' else 7):
+        for i in range(self.time_step_eval):
             total_frame = pd.DataFrame()
 
-            if mode == '':
-                mask[-test_shape:, self.cols_gt] = self.data['y_gt_test_out'][:, i, :]
-                actual_data = self.data['scaler'].inverse_transform(mask)[-test_shape:, self.cols_gt]
-            else:
-                mask[-test_shape:, self.cols_gt] = y_test[:, i, :]
-                actual_data = self.data['scaler'].inverse_transform(mask)[-test_shape:, self.cols_gt]
+            mask[-test_shape:, self.cols_gt] = y_test[:, i, :]
+            actual_data = self.data['scaler'].inverse_transform(mask)[-test_shape:, self.cols_gt]
 
             mask[-test_shape:, self.cols_y] = result[:, i, :]
             actual_predict = self.data['scaler'].inverse_transform(mask)[-test_shape:, self.cols_y]
 
-            predict_frame = pd.DataFrame(actual_data[:, 0], columns=['real_q'])
-            predict_frame['real_h'] = actual_data[:, 1]
-
-            predict_frame['ensemble_q'] = actual_predict[:, 0]
-            predict_frame['ensemble_h'] = actual_predict[:, 1]
-
-            len_df = int(len(lst_full_date) * (1 - self.dt_split_point_outer) - 1)
-            predict_frame['date'] = lst_full_date[len_df:len_df + len(actual_data)]
-            total_frame = total_frame.append(predict_frame)
+            total_frame['real_q'] = actual_data[:, 0]
+            total_frame['real_h'] = actual_data[:, 1]
+            total_frame['ensemble_q'] = actual_predict[:, 0]
+            total_frame['ensemble_h'] = actual_predict[:, 1]
+            total_frame['date'] = lst_full_date[len_df:len_df + len(actual_data)]
 
             print('SAVING CSV...')
             total_frame.to_csv('./log/data_analysis/predict_val_{}.csv'.format(i), index=None)
 
-    def evaluate_model(self, mode=''):
+    def evaluate_model(self):
+        '''
+        Run evaluation
+        '''
         from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
-        # actual_dat = self.data['y_test_out']
-        # actual_pre = self.predict_and_plot()
         lst_data = []
-        for i in range(self.target_timestep if mode == '' else 7):
+        for i in range(self.time_step_eval):
             df = pd.read_csv('./log/data_analysis/predict_val_{}.csv'.format(i))
             actual_dat = df[['real_q', 'real_h']]
             actual_pre = df[['ensemble_q', 'ensemble_h']]
@@ -471,10 +397,12 @@ class Ensemble:
             item_df['mae_h'] = mean_absolute_error(actual_dat.iloc[:, 1], actual_pre.iloc[:, 1])
             item_df['mape_h'] = mean_absolute_percentage_error(actual_dat.iloc[:, 1], actual_pre.iloc[:, 1])
             lst_data.append(item_df)
+
         eval_df = pd.DataFrame(
             data=lst_data,
             columns=['var_score_q', 'mse_q', 'mae_q', 'mape_q', 'var_score_h', 'mse_h', 'mae_h', 'mape_h'])
         eval_df.to_csv('./log/data_analysis/total_error.csv')
+
         # visualize
         df_viz = pd.read_csv('./log/data_analysis/predict_val_0.csv')
         actual_dat = df_viz[['real_q', 'real_h']]
@@ -502,19 +430,10 @@ class Ensemble:
 
         return (np.mean(eval_df["mse_q"].tolist()), np.mean(eval_df["mse_h"].tolist()))
 
-    def evaluate_model_by_month(self):
-        df = pd.read_csv('./log/data_analysis/predict_val_{}.csv'.format(0))
-        df['month'] = df['date'].apply(getMonth)
-        df['year'] = df['date'].apply(getYear)
-
-        # groupby month year then  calc error
-        item_df = df.groupby(['month', 'year'], as_index=False).apply(calcError)
-
-        item_df.to_csv('./log/data_analysis/total_error_monthly.csv')
-
-
 if __name__ == '__main__':
     K.clear_session()
+    np.random.seed(99)
+    tf.random.set_seed(99)
 
     sys.path.append(os.getcwd())
     parser = argparse.ArgumentParser()
@@ -523,25 +442,19 @@ if __name__ == '__main__':
     parser.add_argument('--model', default='rnn_cnn', type=str, help='Model used.')
     args = parser.parse_args()
 
-    np.random.seed(69)
-
-    
     with open('./settings/model/config.yaml', 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     with open('./settings/model/child_default.yaml', 'r') as f:
         child_config = yaml.load(f, Loader=yaml.FullLoader)
     if args.mode == 'train' or args.mode == 'train-inner' or args.mode == 'train-outer':
         model = Ensemble(args.mode, args.model, child_config, **config)
-        # model.train_model_outer()
-        # model.roll_prediction()
-        # model.retransform_prediction()
-        # model.evaluate_model()
+        model.train_model_outer()
+        model.retransform_prediction()
+        model.evaluate_model()
     elif args.mode == "test":
         model = Ensemble(args.mode, args.model, **config)
         model.train_model_outer()
-        model.roll_prediction()
-        # model.retransform_prediction(mode='roll')
-        # model.evaluate_model(mode='roll')
-        # model.evaluate_model_by_month()
+        model.retransform_prediction()
+        model.evaluate_model()
     else:
         raise RuntimeError('Mode must be train or test!')

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from utils.ssa import SSA
 from utils.reprocess_daily import extract_data, ed_extract_data, roll_data
-
+import matplotlib.pyplot as plt
 
 def get_input_data(input_file, default_n, sigma_lst):
     dat = pd.read_csv(input_file, header=0)
@@ -21,10 +21,6 @@ def get_input_data(input_file, default_n, sigma_lst):
 
     H_ssa = lst_H_ssa.reconstruct(sigma_lst)
     Q_ssa = lst_Q_ssa.reconstruct(sigma_lst)
-    # print(Q_ssa[:5])
-    # print(H_ssa[:5])
-    # dat['Q_ssa'] = Q_ssa
-    # dat['H_ssa'] = H_ssa
 
     dat['Q_ssa'] = Q_ssa
     # print(dat['Q'][:5])
@@ -33,6 +29,20 @@ def get_input_data(input_file, default_n, sigma_lst):
 
     # print(dat.head())
     result = dat[['Q', 'H', 'Q_ssa', 'H_ssa']]
+
+    fig = plt.figure(figsize=(10, 6))
+    fig.add_subplot(121)
+    plt.plot(Q[:200], label='Q_raw')
+    plt.plot(Q_ssa[:200], label='Q_ssa')
+    plt.legend()
+
+    fig.add_subplot(122)
+    plt.plot(H[:200], label='H_raw')
+    plt.plot(H_ssa[:200], label='H_ssa')
+    plt.legend()
+
+    plt.savefig('log/model/ssa_processed.png')
+
     return result
 
 
