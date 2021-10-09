@@ -14,7 +14,7 @@ rnn_cnn:
       - [7, 5, 3]
   lstm: 
     bi_unit: [64,64,64,64]
-    si_unit: [64,64,64,64]
+    si_unit: [128,128,128,128]
   optimizer: 'adam'
   loss: 'mse'
   lr: [0.0001, 0.0001, 0.0001, 0.0001]
