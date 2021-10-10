@@ -11,9 +11,8 @@ import yaml
 import tensorflow.keras.backend as K
 import tensorflow as tf
 from utils.ssa import SSA
-from utils.reprocess_daily import extract_data, ed_extract_data, roll_data
+from utils.reprocess_daily import ssa_extract_data
 from utils.data_loader import get_input_data
-from utils.epoch_size_tuning import get_epoch_size_list
 
 
 def getMonth(_str):
@@ -61,6 +60,7 @@ class Ensemble:
         self.cols_x = self._data_kwargs.get('cols_x')
         self.cols_y = self._data_kwargs.get('cols_y')
         self.cols_gt = self._data_kwargs.get('cols_gt')
+        self.pred_factor = self._data_kwargs.get('pred_factor')
         self.target_timestep = self._data_kwargs.get('target_timestep')
         self.window_size = self._data_kwargs.get('window_size')
         self.norm_method = self._data_kwargs.get('norm_method')
@@ -97,35 +97,37 @@ class Ensemble:
         test_in: data use for TRAIN main model
         test_out: data use for actual test of the total system 
         '''
-        dat = get_input_data(self.data_file, self.default_n, self.sigma_lst)
-        dat = dat.to_numpy()
+        # dat = get_input_data(self.data_file, self.default_n, self.sigma_lst)
+        QH_stacked, Q_comps, H_comps  = get_input_data(self.data_file, self.default_n, self.sigma_lst)
 
         data = {}
-        data['shape'] = dat.shape
+        data['shape'] = QH_stacked.shape
 
-        test_outer = int(dat.shape[0] * self.dt_split_point_outer)
-        train_inner = int((dat.shape[0] - test_outer) * (1 - self.dt_split_point_inner))
+        test_outer = int(QH_stacked.shape[0] * self.dt_split_point_outer)
+        train_inner = int((QH_stacked.shape[0] - test_outer) * (1 - self.dt_split_point_inner))
 
         if self.model_kind == 'rnn_cnn':
-            x, y, scaler, y_gt = extract_data(dataframe=dat,
-                                              window_size=self.window_size,
-                                              target_timstep=self.target_timestep,
-                                              cols_x=self.cols_x,
-                                              cols_y=self.cols_y,
-                                              cols_gt=self.cols_gt,
-                                              mode=self.norm_method)
+            xq, xh, scaler, y_gt = ssa_extract_data(dataframe=QH_stacked,
+                                                    q_ssa=Q_comps,
+                                                    h_ssa= H_comps,
+                                                    window_size=self.window_size,
+                                                    target_timstep=self.target_timestep,
+                                                    mode=self.norm_method)
             
-            x_train_in, y_train_in, y_gt_train_in = x[:train_inner, :], y[:train_inner, :], y_gt[:train_inner, :]
-            x_test_in, y_test_in, y_gt_test_in = x[train_inner:-test_outer, :], y[train_inner:-test_outer, :], y_gt[
-                train_inner:-test_outer, :]
-            x_test_out, y_test_out, y_gt_test_out = x[-test_outer:, :], y[-test_outer:, :], y_gt[-test_outer:, :]
-
+            if self.pred_factor == 'q':
+                x_train_in, y_gt_train_in = xq[:train_inner, :], y_gt[:train_inner, 0]
+                x_test_in, y_gt_test_in = xq[train_inner:-test_outer, :], y_gt[train_inner:-test_outer, 0]
+                x_test_out, y_gt_test_out = xq[-test_outer:, :],y_gt[-test_outer:, 0]
+            else:
+                x_train_in, y_gt_train_in = xh[:train_inner, :], y_gt[:train_inner, 1]
+                x_test_in, y_gt_test_in = xh[train_inner:-test_outer, :], y_gt[train_inner:-test_outer, 1]
+                x_test_out, y_gt_test_out = xh[-test_outer:, :],y_gt[-test_outer:, 1]
+                
             for cat in ["train_in", "test_in", "test_out"]:
-                x, y, y_gt = locals()["x_" + cat], locals()["y_" + cat], locals()["y_gt_" + cat]
-                print(cat, "x: ", x.shape, "y: ", y.shape)
+                x, y_gt = locals()["x_" + cat], locals()["y_gt_" + cat]
+                print(cat, "x: ", x.shape, "ygtr: ", y_gt.shape)
                 data["x_" + cat] = x
-                data["y_" + cat] = y
-                data["y_gt_" + cat] = y_gt
+                data["y_" + cat] = y_gt
 
         data['scaler'] = scaler
         return data
@@ -159,7 +161,6 @@ class Ensemble:
         '''
         function for train the child models
         '''
-
         #prepare train data for main model, which is the result of child models
         train_shape = self.data['y_test_in'].shape
         test_shape = self.data['y_test_out'].shape
@@ -186,7 +187,7 @@ class Ensemble:
             for i in range(self.child_config['num']):
                 # for epoch in range(self.epoch_min, self.epoch_max + 1, self.epoch_step):
                 if self.model_kind == 'rnn_cnn':
-                    self.inner_models[i].load_weights(self.log_dir + f'ModelPool/best_model_{i}.hdf5')
+                    self.inner_models[i].load_weights(self.log_dir + f'ModelPool/best_model_{self.pred_factor}_{i}.hdf5')
                 
                 train, test = self.predict_in(i)
                 for k in range(self.target_timestep):
@@ -327,13 +328,13 @@ class Ensemble:
             # print(f'result model: {res0.shape}')
             x = x.tolist()
             x.append(res0.reshape(self.output_dim).tolist())
-            gt.append(self.data['y_gt_test_out'][ind])
+            gt.append(self.data['y_test_out'][ind])
 
             for i in range(1, self.time_step_eval):
                 res_sub = self.predict_in(data=np.array(x[-self.window_size:])[np.newaxis, :])
                 res = self.outer_model.predict(
                     x=[res_sub[np.newaxis, :], np.array(x[-self.window_size:])[np.newaxis, :]], batch_size=1)
-                gt.append(self.data['y_gt_test_out'][ind + i])
+                gt.append(self.data['y_test_out'][ind + i])
                 x.append(res.reshape(self.output_dim).tolist())
 
             result.append(x[-self.time_step_eval:])
@@ -352,7 +353,7 @@ class Ensemble:
         '''
         result, y_test = self.roll_prediction()
         mask = np.zeros(self.data['shape'])
-        test_shape = self.data['y_gt_test_out'].shape[0] - self.time_step_eval
+        test_shape = self.data['y_test_out'].shape[0] - self.time_step_eval
 
         lst_full_date = pd.read_csv(self.data_file)['date'].tolist()
         len_df = int(len(lst_full_date) * (1 - self.dt_split_point_outer) - 1)

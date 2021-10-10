@@ -58,6 +58,30 @@ def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[
             ygt.append(dataframe[i + window_size, cols_gt])
     return np.array(xs), np.array(ys), scaler, np.array(ygt)
 
+def ssa_extract_data(gtruth, q_ssa, h_ssa, window_size=7, target_timstep=1, mode='std'):
+    '''
+    generate data with separate ssa components
+    '''
+    gtruth, scaler_gtr = normalize_data(gtruth, mode)
+    q_ssa, _ = normalize_data(q_ssa, mode)
+    h_ssa, _ = normalize_data(h_ssa, mode)
+
+    xs_q = [] # return input data
+    xs_h = [] # return input data
+    ygt = [] # return groundtruth data
+
+    if target_timstep != 1:
+        for i in range(gtruth.shape[0] - window_size - target_timstep):
+            xs_q.append(q_ssa[i:i + window_size, :])
+            xs_h.append(h_ssa[i:i + window_size, :])
+            ygt.append(gtruth[i + window_size:i + window_size + target_timstep, :])
+    else:
+        for i in range(gtruth.shape[0] - window_size - target_timstep):
+            xs_q.append(q_ssa[i:i + window_size, :])
+            xs_h.append(h_ssa[i:i + window_size, :])
+            ygt.append(gtruth[i + window_size, :])
+
+    return np.array(xs_q), np.array(xs_h), scaler_gtr, np.array(ygt)
 
 def ed_extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[], mode='std'):
     dataframe, scaler = normalize_data(dataframe, mode)

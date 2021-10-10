@@ -4,6 +4,7 @@ data:
   split_point_outer: 0.05
   split_point_inner: 0.4
   norm_method: min_max
+  pred_factor: q
   cols_x: #column used for input - the SSA-filtered Q and H
     - 2
     - 3
@@ -31,11 +32,11 @@ model:
       - 0
     batch_size: [128, 128, 128, 128]
   epochs_out: 400
-  in_dim: 2
-  out_dim: 2
+  in_dim: 20
+  out_dim: 1
   patience: 50
   batch_size: 128
   dropout: 0
 ssa:
   default_n: 20 # default window size
-  sigma_lst: [0,1,2,3,4,5,6,7,8] #default_sigma_lst
+  sigma_lst: [0,1,2,3,4,5,6,7,8] # default_sigma_lst

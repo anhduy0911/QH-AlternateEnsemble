@@ -45,8 +45,28 @@ def get_input_data(input_file, default_n, sigma_lst):
 
     return result
 
+def get_ssa_data(input_file, default_n):
+    dat = pd.read_csv(input_file, header=0)
+    Q = dat['Q'].to_list()
+    H = dat['H'].to_list()
+    # print(Q[:5])
+    # print(H[:5])
+    lst_H_ssa = SSA(H, default_n)
+    lst_Q_ssa = SSA(Q, default_n)
+
+    q_comp = lst_Q_ssa.TS_comps
+    h_comp = lst_H_ssa.TS_comps
+
+    Q = np.expand_dims(dat['Q'].to_numpy(), 1)
+    H = np.expand_dims(dat['H'].to_numpy(), 1)
+
+    QH_stack = np.hstack((Q, H))
+    print(QH_stack.shape)
+    print(q_comp.shape)
+    return QH_stack, q_comp, h_comp
 
 if __name__ == "__main__":
-    res = get_input_data('../data/SonTay.csv', 20, [1, 2, 3])
-    res.to_csv('../data/modified_data.csv', index=False)
-    print(res.head())
+    # res = get_input_data('../data/SonTay.csv', 20, [1, 2, 3])
+    # res.to_csv('../data/modified_data.csv', index=False)
+    # print(res.head())
+    get_ssa_data('../data/SonTay.csv', 20)
