@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from tensorflow.keras.layers import Dense, Input, Bidirectional, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed
+from tensorflow.keras.layers import Dense, Input, Bidirectional, LSTM, Reshape
+from tensorflow.keras.layers import Concatenate, Conv1D, TimeDistributed, Attention
 from tensorflow.keras.models import Model
 import sys
 import os
@@ -254,8 +255,15 @@ class Ensemble:
         rnn_2 = LSTM(units=128, return_sequences=False, dropout=self.dropout, recurrent_dropout=self.dropout)
         rnn_2_out = rnn_2(input_submodel, initial_state=[state_h, state_c])
 
+        # Attention
+        # Using rnn_2_out as query and state_h as values
+        attention = Attention()
+        context_vec = attention([rnn_2_out, state_h])
+        context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, rnn_2_out])
+        Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
+        attention_vec = Wc(context_and_rnn_2_out)
         dense_4 = Dense(units=self.output_dim)
-        output = dense_4(rnn_2_out)
+        output = dense_4(attention_vec)
 
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
         model.compile(loss='mse', optimizer='adam', metrics=['mae', 'mape'])
