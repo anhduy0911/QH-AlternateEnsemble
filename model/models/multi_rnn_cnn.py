@@ -2,6 +2,8 @@ from tensorflow.keras.layers import Conv1D, Input, Bidirectional, LSTM, Concaten
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.optimizers import Adam, Adadelta, RMSprop
+import numpy as np
+import tensorflow as tf 
 
 def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_timestep=1):
     ''' 
@@ -10,12 +12,12 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     input = Input(shape=(None, input_dim))
 
     conv = Conv1D(filters=opt['conv']['n_kernels'][index][0], 
-                kernel_size=opt['conv']['kernel_s'][index][0], padding='same')
+                kernel_size=opt['conv']['kernel_s'][index][0], activation='relu', padding='same')
     conv_out = conv(input)
     conv_2 = Conv1D(filters=opt['conv']['n_kernels'][index][1], 
-                kernel_size=opt['conv']['kernel_s'][index][1], padding='same')
+                kernel_size=opt['conv']['kernel_s'][index][1], activation='relu', padding='same')
     conv_out_2 = conv_2(conv_out)
-    conv_3 = Conv1D(filters=opt['conv']['n_kernels'][index][2], 
+    conv_3 = Conv1D(filters=opt['conv']['n_kernels'][index][2], activation='relu',
                 kernel_size=window_size - target_timestep + 1)
     conv_out_3 = conv_3(conv_out_2)
 
@@ -27,14 +29,16 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     state_h = Concatenate(axis=-1)([forward_h, backward_h])
     state_c = Concatenate(axis=-1)([forward_c, backward_c])
 
-    rnn_3 = LSTM(units=opt['lstm']['si_unit'][index], return_sequences=False, return_state=False, 
+    rnn_3 = LSTM(units=opt['lstm']['si_unit'][index], return_sequences=True, return_state=False, 
                 dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
     rnn_out_3 = rnn_3(rnn_out_1, initial_state=[state_h, state_c])
 
-    dense_3 = Dense(units=output_dim)
-    output = dense_3(rnn_out_3)
-
-    model = Model(inputs=input, outputs=output)
+    dense_3 = TimeDistributed(Dense(units=output_dim))
+    
+    # print(rnn_out_3.shape)
+    outs = dense_3(rnn_out_3)
+    # print(outs.shape)
+    model = Model(inputs=input, outputs=outs)
 
     if opt['optimizer'] == 'rmsprop':
         optimizer = RMSprop(learning_rate=opt['lr'][index])
@@ -47,10 +51,10 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     return model
 
 
-def train_model(model, index, x_train, y_train, batch_size, epochs, fraction=0.1, patience=0, early_stop=False, save_dir=''):
+def train_model(model, index, x_train, y_train, batch_size, epochs, fraction=0.1, patience=0, early_stop=False, save_dir='', pred_factor='q'):
     callbacks = []
 
-    checkpoint = ModelCheckpoint(save_dir + f'best_model_{index}.hdf5',
+    checkpoint = ModelCheckpoint(save_dir + f'best_model_{pred_factor}_{index}.hdf5',
                                  monitor='val_loss',
                                  verbose=1,
                                  save_best_only=True)
@@ -69,3 +73,22 @@ def train_model(model, index, x_train, y_train, batch_size, epochs, fraction=0.1
                         validation_split=fraction)
 
     return model, history
+
+if __name__ == '__main__':
+    import yaml
+    with open('./settings/model/child_default.yaml', 'r') as f:
+        child_config = yaml.load(f, Loader=yaml.FullLoader)
+        print(child_config)
+        model = model_builder(0, child_config['rnn_cnn'], input_dim=20, output_dim=1, target_timestep=7)
+        x = np.random.rand(10,30, 20)
+        y = model(x)
+        # fake training
+        x = np.random.rand(4000, 30, 20)
+        y = np.random.rand(4000, 7, 1)
+        model, _ = train_model(model, 0, x, y, 200, 50)
+        y_pred = model.predict(x)
+
+        import matplotlib.pyplot as plt 
+        plt.plot(y[:, 0, :])
+        plt.plot(y_pred[:, 0, :])
+        plt.savefig('test.png')

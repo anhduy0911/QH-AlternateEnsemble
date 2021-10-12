@@ -11,8 +11,8 @@ import yaml
 import tensorflow.keras.backend as K
 import tensorflow as tf
 from utils.ssa import SSA
-from utils.reprocess_daily import ssa_extract_data
-from utils.data_loader import get_input_data
+from utils.reprocess_daily import ssa_extract_data, extract_data
+from utils.data_loader import get_ssa_data, get_input_data
 
 
 def getMonth(_str):
@@ -98,30 +98,40 @@ class Ensemble:
         test_out: data use for actual test of the total system 
         '''
         # dat = get_input_data(self.data_file, self.default_n, self.sigma_lst)
-        QH_stacked, Q_comps, H_comps  = get_input_data(self.data_file, self.default_n, self.sigma_lst)
+        # dat = dat.to_numpy()
+        QH_stacked, Q_comps, H_comps  = get_ssa_data(self.data_file, self.default_n)
 
         data = {}
         data['shape'] = QH_stacked.shape
-
         test_outer = int(QH_stacked.shape[0] * self.dt_split_point_outer)
         train_inner = int((QH_stacked.shape[0] - test_outer) * (1 - self.dt_split_point_inner))
 
+        # data['shape'] = dat.shape
+        # test_outer = int(dat.shape[0] * self.dt_split_point_outer)
+        # train_inner = int((dat.shape[0] - test_outer) * (1 - self.dt_split_point_inner))
+        
         if self.model_kind == 'rnn_cnn':
-            xq, xh, scaler, y_gt = ssa_extract_data(dataframe=QH_stacked,
+            # xq, xh, scaler, y_gt = extract_data(dataframe=dat, window_size=self.window_size, 
+            #                                     target_timstep=self.target_timestep,
+            #                                     cols_x=self.cols_x, cols_y=self.cols_y,
+            #                                     cols_gt=self.cols_gt, mode=self.norm_method)
+                                                
+            xq, xh, scaler, y_gt = ssa_extract_data(gtruth=QH_stacked,
                                                     q_ssa=Q_comps,
                                                     h_ssa= H_comps,
                                                     window_size=self.window_size,
-                                                    target_timstep=self.target_timestep,
+                                                    target_timstep=self.time_step_eval,
                                                     mode=self.norm_method)
             
+            xq = np.concatenate((xq, xh), axis=2)
             if self.pred_factor == 'q':
-                x_train_in, y_gt_train_in = xq[:train_inner, :], y_gt[:train_inner, 0]
-                x_test_in, y_gt_test_in = xq[train_inner:-test_outer, :], y_gt[train_inner:-test_outer, 0]
-                x_test_out, y_gt_test_out = xq[-test_outer:, :],y_gt[-test_outer:, 0]
+                x_train_in, y_gt_train_in = xq[:train_inner, :], y_gt[:train_inner,:, :]
+                x_test_in, y_gt_test_in = xq[train_inner:-test_outer, :], y_gt[train_inner:-test_outer,:, :]
+                x_test_out, y_gt_test_out = xq[-test_outer:, :],y_gt[-test_outer:, :, :]
             else:
-                x_train_in, y_gt_train_in = xh[:train_inner, :], y_gt[:train_inner, 1]
-                x_test_in, y_gt_test_in = xh[train_inner:-test_outer, :], y_gt[train_inner:-test_outer, 1]
-                x_test_out, y_gt_test_out = xh[-test_outer:, :],y_gt[-test_outer:, 1]
+                x_train_in, y_gt_train_in = xh[:train_inner, :], y_gt[:train_inner, :, 1][:,:, np.newaxis]
+                x_test_in, y_gt_test_in = xh[train_inner:-test_outer, :], y_gt[train_inner:-test_outer,:, 1][:,:, np.newaxis]
+                x_test_out, y_gt_test_out = xh[-test_outer:, :],y_gt[-test_outer:,:, 1][:,:, np.newaxis]
                 
             for cat in ["train_in", "test_in", "test_out"]:
                 x, y_gt = locals()["x_" + cat], locals()["y_gt_" + cat]
@@ -152,7 +162,7 @@ class Ensemble:
         for i in range(self.child_config['num']):
             if self.model_kind == 'rnn_cnn':
                 from model.models.multi_rnn_cnn import model_builder
-                model = model_builder(i, self.child_config, self.input_dim, self.output_dim, self.window_size, self.target_timestep)
+                model = model_builder(i, self.child_config, self.input_dim, self.output_dim, self.window_size, self.time_step_eval)
                 models.append(model)
 
         return models
@@ -164,9 +174,10 @@ class Ensemble:
         #prepare train data for main model, which is the result of child models
         train_shape = self.data['y_test_in'].shape
         test_shape = self.data['y_test_out'].shape
-        x_train_out = np.zeros(shape=(train_shape[0], self.target_timestep, self.child_config['num'], train_shape[1]))
-        x_test_out = np.zeros(shape=(test_shape[0], self.target_timestep, self.child_config['num'], test_shape[1]))
-
+        # print(train_shape)
+        x_train_out = np.zeros(shape=(train_shape[0], self.target_timestep, self.child_config['num'], train_shape[2]))
+        x_test_out = np.zeros(shape=(test_shape[0], self.target_timestep, self.child_config['num'], test_shape[2]))
+        # print(x_train_out.shape)
         if (self.mode == 'train' or self.mode == 'train-inner'):
             for i in range(self.child_config['num']):
                 if self.model_kind == 'rnn_cnn':
@@ -176,13 +187,13 @@ class Ensemble:
                                                       self.data['y_train_in'],
                                                       self.child_config['batch_size'][i],
                                                       self.child_config['epoch'][i],
-                                                      save_dir=self.log_dir + 'ModelPool/')
+                                                      save_dir=self.log_dir + 'ModelPool/',
+                                                      pred_factor=self.pred_factor)
 
                 # gen train data for main model with prediction of i-th child
                 train, test = self.predict_in(i)
-                for k in range(self.target_timestep):
-                    x_train_out[:, k, i, :] = train
-                    x_test_out[:, k, i, :] = test
+                x_train_out[:, :, i, :] = train
+                x_test_out[:, :, i, :] = test
         else:
             for i in range(self.child_config['num']):
                 # for epoch in range(self.epoch_min, self.epoch_max + 1, self.epoch_step):
@@ -190,9 +201,8 @@ class Ensemble:
                     self.inner_models[i].load_weights(self.log_dir + f'ModelPool/best_model_{self.pred_factor}_{i}.hdf5')
                 
                 train, test = self.predict_in(i)
-                for k in range(self.target_timestep):
-                    x_train_out[:, k, i, :] = train
-                    x_test_out[:, k, i, :] = test
+                x_train_out[:, :, i, :] = train
+                x_test_out[:, :, i, :] = test
 
         self.data_out_generate(x_train_out, x_test_out)
 
@@ -206,9 +216,10 @@ class Ensemble:
         else: # this case when gen data during evaluation
             x_test_out = np.zeros((self.child_config['num'], self.output_dim))
             for ind in range(self.child_config['num']):
-                self.inner_models[ind].load_weights(self.log_dir + f'ModelPool/best_model_{ind}.hdf5')
+                # self.inner_models[ind].load_weights(self.log_dir + f'ModelPool/best_model_{self.pred_factor}_{ind}.hdf5')
+                # print(f'output val {ind}: {self.inner_models[ind].predict(data, batch_size=1)}')
                 x_test_out[ind, :] = self.inner_models[ind].predict(data, batch_size=1)
-           
+            # print('Now it go out bro')
             # here if apply attention then should not flatten out
             x_test_out = x_test_out.reshape(1, -1)
             return x_test_out
@@ -252,10 +263,10 @@ class Ensemble:
         # rnn_2 = LSTM(units=256,return_sequences=True)
         # rnn_2_out = rnn_2(input_submodel,initial_state=[state_h,state_c])
 
-        rnn_2 = LSTM(units=128, return_sequences=False, dropout=self.dropout, recurrent_dropout=self.dropout)
+        rnn_2 = LSTM(units=128, return_sequences=True, dropout=self.dropout, recurrent_dropout=self.dropout)
         rnn_2_out = rnn_2(input_submodel, initial_state=[state_h, state_c])
 
-        dense_4 = Dense(units=self.output_dim)
+        dense_4 = TimeDistributed(Dense(units=self.output_dim))
         output = dense_4(rnn_2_out)
 
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
@@ -331,6 +342,7 @@ class Ensemble:
             gt.append(self.data['y_test_out'][ind])
 
             for i in range(1, self.time_step_eval):
+                print(np.array(x[-self.window_size:]).shape)
                 res_sub = self.predict_in(data=np.array(x[-self.window_size:])[np.newaxis, :])
                 res = self.outer_model.predict(
                     x=[res_sub[np.newaxis, :], np.array(x[-self.window_size:])[np.newaxis, :]], batch_size=1)
@@ -346,14 +358,30 @@ class Ensemble:
         print(f'GTRUTH SHAPE: {gtruth.shape}')
 
         return result, gtruth
-
+    
+    def multistep_prediction(self):
+        '''
+        Mutistep prediction, simutaneously
+        '''    
+        pred = self.outer_model.predict(x=[self.data['x_test_out_submodel'], self.data['x_test_out']], 
+                                        batch_size=self.batch_size)
+        
+        # print(pred.shape) 
+        # print(self.data['y_test_out'].shape)   
+        
+        return pred, self.data['y_test_out']
+    
     def retransform_prediction(self):
         '''
         func for convert the prediction to initial scale
         '''
-        result, y_test = self.roll_prediction()
+        if self.target_timestep == 1:
+            result, y_test = self.roll_prediction()
+        else:
+            result, y_test = self.multistep_prediction()
+
         mask = np.zeros(self.data['shape'])
-        test_shape = self.data['y_test_out'].shape[0] - self.time_step_eval
+        test_shape = self.data['y_test_out'].shape[0]
 
         lst_full_date = pd.read_csv(self.data_file)['date'].tolist()
         len_df = int(len(lst_full_date) * (1 - self.dt_split_point_outer) - 1)
@@ -432,6 +460,8 @@ class Ensemble:
 
         return (np.mean(eval_df["mse_q"].tolist()), np.mean(eval_df["mse_h"].tolist()))
 
+    
+
 if __name__ == '__main__':
     K.clear_session()
     np.random.seed(99)
@@ -458,5 +488,6 @@ if __name__ == '__main__':
         model.train_model_outer()
         model.retransform_prediction()
         model.evaluate_model()
+        # model.multistep_prediction()
     else:
         raise RuntimeError('Mode must be train or test!')

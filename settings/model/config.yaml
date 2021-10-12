@@ -9,22 +9,22 @@ data:
     - 2
     - 3
   cols_y: #column used as groundtruth during training process - the SSA-filtered Q and H
-    - 2
-    - 3
+    - 0
+    - 1
   cols_gt: #column used as groudtruth during test phase - the raw Q and H
     - 0
     - 1
   window_size: 30
-  target_timestep: 1 # the actual number of timestep output by model - only 1 time step
+  target_timestep: 7 # the actual number of timestep output by model - only 1 time step
   time_step_eval: 7 # the roll prediction timestep - use for multistep prediction
 model:
   child:
     num: 4 #number of children
     epoch: 
+      - 25
+      - 50
+      - 75
       - 100
-      - 150
-      - 200
-      - 250
     dropout: 
       - 0
       - 0
@@ -33,10 +33,10 @@ model:
     batch_size: [128, 128, 128, 128]
   epochs_out: 400
   in_dim: 20
-  out_dim: 1
+  out_dim: 2
   patience: 50
   batch_size: 128
   dropout: 0
 ssa:
-  default_n: 20 # default window size
+  default_n: 10 # default window size
   sigma_lst: [0,1,2,3,4,5,6,7,8] # default_sigma_lst
