@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from utils.ssa import SSA
 
 def normalize_data(dataframe, mode):
     if mode == 'abs':
@@ -48,9 +49,9 @@ def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[
         for i in range(dataframe.shape[0] - window_size - target_timstep):
             xs.append(dataframe[i:i + window_size, cols_x])
             ys.append(dataframe[i + window_size:i + window_size + target_timstep,
-                                cols_y].reshape(target_timstep, len(cols_y)))
+                                cols_y])
             ygt.append(dataframe[i + window_size:i + window_size + target_timstep,
-                       cols_gt].reshape(target_timstep, len(cols_gt)))
+                       cols_gt])
     else:
         for i in range(dataframe.shape[0] - window_size - target_timstep):
             xs.append(dataframe[i:i + window_size, cols_x])
@@ -58,6 +59,25 @@ def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[
             ygt.append(dataframe[i + window_size, cols_gt])
     return np.array(xs), np.array(ys), scaler, np.array(ygt)
 
+def transform_ssa(input, n):
+    print(input.shape)
+    step = input.shape[0]
+    qs = []
+    hs = []
+    for i in range(step):
+        lst_H_ssa = SSA(input[i, :, 0], n)
+        lst_Q_ssa = SSA(input[i, :, 1], n)
+        q_comp = lst_Q_ssa.TS_comps
+        h_comp = lst_H_ssa.TS_comps
+        qs.append(q_comp)
+        hs.append(h_comp)
+    
+    qs = np.array(qs)
+    hs = np.array(hs)
+    result = np.concatenate((qs, hs), axis=2)
+    print(result.shape)
+    return result
+    
 def ssa_extract_data(gtruth, q_ssa, h_ssa, window_size=7, target_timstep=1, mode='std'):
     '''
     generate data with separate ssa components

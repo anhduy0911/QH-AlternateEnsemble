@@ -11,7 +11,7 @@ import yaml
 import tensorflow.keras.backend as K
 import tensorflow as tf
 from utils.ssa import SSA
-from utils.reprocess_daily import ssa_extract_data, extract_data
+from utils.reprocess_daily import ssa_extract_data, extract_data, transform_ssa
 from utils.data_loader import get_ssa_data, get_input_data
 
 
@@ -98,32 +98,36 @@ class Ensemble:
         test_out: data use for actual test of the total system 
         '''
         # dat = get_input_data(self.data_file, self.default_n, self.sigma_lst)
-        # dat = dat.to_numpy()
-        QH_stacked, Q_comps, H_comps  = get_ssa_data(self.data_file, self.default_n)
+        dat = pd.read_csv(self.data_file, header=0)
+        dat = dat[['Q', 'H']]
+        dat = dat.to_numpy()
+        # QH_stacked, Q_comps, H_comps  = get_ssa_data(self.data_file, self.default_n)
 
         data = {}
-        data['shape'] = QH_stacked.shape
-        test_outer = int(QH_stacked.shape[0] * self.dt_split_point_outer)
-        train_inner = int((QH_stacked.shape[0] - test_outer) * (1 - self.dt_split_point_inner))
+        # data['shape'] = QH_stacked.shape
+        # test_outer = int(QH_stacked.shape[0] * self.dt_split_point_outer)
+        # train_inner = int((QH_stacked.shape[0] - test_outer) * (1 - self.dt_split_point_inner))
 
-        # data['shape'] = dat.shape
-        # test_outer = int(dat.shape[0] * self.dt_split_point_outer)
-        # train_inner = int((dat.shape[0] - test_outer) * (1 - self.dt_split_point_inner))
+        data['shape'] = dat.shape
+        test_outer = int(dat.shape[0] * self.dt_split_point_outer)
+        train_inner = int((dat.shape[0] - test_outer) * (1 - self.dt_split_point_inner))
         
         if self.model_kind == 'rnn_cnn':
-            # xq, xh, scaler, y_gt = extract_data(dataframe=dat, window_size=self.window_size, 
-            #                                     target_timstep=self.target_timestep,
-            #                                     cols_x=self.cols_x, cols_y=self.cols_y,
-            #                                     cols_gt=self.cols_gt, mode=self.norm_method)
+            xq, xh, scaler, y_gt = extract_data(dataframe=dat, window_size=self.window_size, 
+                                                target_timstep=self.target_timestep,
+                                                cols_x=self.cols_x, cols_y=self.cols_y,
+                                                cols_gt=self.cols_gt, mode=self.norm_method)
+
+            xq = transform_ssa(xq, self.default_n)
                                                 
-            xq, xh, scaler, y_gt = ssa_extract_data(gtruth=QH_stacked,
-                                                    q_ssa=Q_comps,
-                                                    h_ssa= H_comps,
-                                                    window_size=self.window_size,
-                                                    target_timstep=self.time_step_eval,
-                                                    mode=self.norm_method)
+            # xq, xh, scaler, y_gt = ssa_extract_data(gtruth=QH_stacked,
+            #                                         q_ssa=Q_comps,
+            #                                         h_ssa= H_comps,
+            #                                         window_size=self.window_size,
+            #                                         target_timstep=self.time_step_eval,
+            #                                         mode=self.norm_method)
             
-            xq = np.concatenate((xq, xh), axis=2)
+            # xq = np.concatenate((xq, xh), axis=2)
             if self.pred_factor == 'q':
                 x_train_in, y_gt_train_in = xq[:train_inner, :], y_gt[:train_inner,:, :]
                 x_test_in, y_gt_test_in = xq[train_inner:-test_outer, :], y_gt[train_inner:-test_outer,:, :]
