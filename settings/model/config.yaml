@@ -6,8 +6,8 @@ data:
   norm_method: min_max
   pred_factor: q
   cols_x: #column used for input - the SSA-filtered Q and H
-    - 2
-    - 3
+    - 0
+    - 1
   cols_y: #column used as groundtruth during training process - the SSA-filtered Q and H
     - 0
     - 1
@@ -32,7 +32,7 @@ model:
       - 0
     batch_size: [128, 128, 128, 128]
   epochs_out: 400
-  in_dim: 20
+  in_dim: 2
   out_dim: 2
   patience: 50
   batch_size: 128

@@ -59,7 +59,7 @@ def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[
             ygt.append(dataframe[i + window_size, cols_gt])
     return np.array(xs), np.array(ys), scaler, np.array(ygt)
 
-def transform_ssa(input, n):
+def transform_ssa(input, n, sigma_lst):
     print(input.shape)
     step = input.shape[0]
     qs = []
@@ -69,8 +69,11 @@ def transform_ssa(input, n):
         lst_Q_ssa = SSA(input[i, :, 1], n)
         q_comp = lst_Q_ssa.TS_comps
         h_comp = lst_H_ssa.TS_comps
-        qs.append(q_comp)
-        hs.append(h_comp)
+
+        q_merged = lst_Q_ssa.reconstruct(sigma_lst)
+        h_merged = lst_H_ssa.reconstruct(sigma_lst)
+        qs.append(q_merged)
+        hs.append(h_merged)
     
     qs = np.array(qs)
     hs = np.array(hs)

@@ -120,7 +120,7 @@ class Ensemble:
                                                 cols_x=self.cols_x, cols_y=self.cols_y,
                                                 cols_gt=self.cols_gt, mode=self.norm_method)
 
-            xq = transform_ssa(xq, self.default_n)
+            xq = transform_ssa(xq, self.default_n, self.sigma_lst)
                                                 
             # xq, xh, scaler, y_gt = ssa_extract_data(gtruth=QH_stacked,
             #                                         q_ssa=Q_comps,
@@ -257,6 +257,11 @@ class Ensemble:
         input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
         input_val_x = Input(shape=(self.window_size, self.input_dim))
         
+        # rnn_att = LSTM(units=self.input_dim, return_sequences=True, return_state=False)
+        # component_att_weight = softmax(rnn_att(input_val_x), axis=-1)
+        # weighted_input = tf.math.multiply(input_val_x, component_att_weight)
+        # sum_input = tf.math.reduce_sum(weighted_input, axis=2, keepdims=True)
+
         rnn_1 = Bidirectional(
             LSTM(units=64,
                  return_sequences=True,
