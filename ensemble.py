@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from tensorflow.keras.layers import Dense, Input, Bidirectional, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed
+from tensorflow.keras.layers import Dense, Input, Bidirectional, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed, Attention
 from tensorflow.keras.models import Model
 import sys
 import os
@@ -13,6 +13,8 @@ import tensorflow as tf
 from utils.ssa import SSA
 from utils.reprocess_daily import ssa_extract_data, extract_data, transform_ssa
 from utils.data_loader import get_ssa_data, get_input_data
+from tensorflow.keras.activations import softmax
+
 
 
 def getMonth(_str):
@@ -169,6 +171,7 @@ class Ensemble:
                 model = model_builder(i, self.child_config, self.input_dim, self.output_dim, self.window_size, self.time_step_eval)
                 models.append(model)
 
+        print(models[0].summary())
         return models
 
     def train_model_inner(self):
@@ -253,7 +256,7 @@ class Ensemble:
         #modify the dim here
         input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
         input_val_x = Input(shape=(self.window_size, self.input_dim))
-
+        
         rnn_1 = Bidirectional(
             LSTM(units=64,
                  return_sequences=True,
@@ -264,14 +267,23 @@ class Ensemble:
         state_h = Concatenate(axis=-1)([forward_h, backward_h])
         state_c = Concatenate(axis=-1)([forward_c, backward_c])
 
-        # rnn_2 = LSTM(units=256,return_sequences=True)
-        # rnn_2_out = rnn_2(input_submodel,initial_state=[state_h,state_c])
+        # conv_att = Conv1D(filters=64, activation='relu', kernel_size=self.window_size - self.target_timestep + 1)
+        # key_value = conv_att(rnn_1_out)
+        rnn_2 = LSTM(units=128,return_sequences=True)
+        rnn_2_out = rnn_2(input_submodel,initial_state=[state_h,state_c])
 
-        rnn_2 = LSTM(units=128, return_sequences=True, dropout=self.dropout, recurrent_dropout=self.dropout)
-        rnn_2_out = rnn_2(input_submodel, initial_state=[state_h, state_c])
+        # rnn_2 = LSTM(units=128, return_sequences=True, dropout=self.dropout, recurrent_dropout=self.dropout)
+        # rnn_2_out = rnn_2(weighed_input, initial_state=[state_h, state_c])
 
+        # Attention
+        # Using rnn_2_out as query and state_h as values
+        attention = Attention()
+        context_vec = attention([rnn_2_out, rnn_1_out])
+        context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, rnn_2_out])
+        Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
+        attention_vec = Wc(context_and_rnn_2_out)
         dense_4 = TimeDistributed(Dense(units=self.output_dim))
-        output = dense_4(rnn_2_out)
+        output = dense_4(attention_vec)
 
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
         model.compile(loss='mse', optimizer='adam', metrics=['mae', 'mape'])

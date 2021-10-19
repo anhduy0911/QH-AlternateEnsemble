@@ -2,6 +2,7 @@ from tensorflow.keras.layers import Conv1D, Input, Bidirectional, LSTM, Concaten
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.optimizers import Adam, Adadelta, RMSprop
+from tensorflow.keras.activations import softmax
 import numpy as np
 import tensorflow as tf 
 
@@ -10,22 +11,19 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     build the (index)th child model base on given param set
     '''
     input = Input(shape=(None, input_dim))
+    rnn_att = LSTM(units=input_dim, return_sequences=True, return_state=False)
+    component_att_weight = softmax(rnn_att(input), axis=-1)
+    weighted_input = tf.math.multiply(input, component_att_weight)
+    sum_input = tf.math.reduce_sum(weighted_input, axis=2, keepdims=True)
 
-    conv = Conv1D(filters=opt['conv']['n_kernels'][index][0], 
-                kernel_size=opt['conv']['kernel_s'][index][0], activation='relu', padding='same')
-    conv_out = conv(input)
-    conv_2 = Conv1D(filters=opt['conv']['n_kernels'][index][1], 
-                kernel_size=opt['conv']['kernel_s'][index][1], activation='relu', padding='same')
-    conv_out_2 = conv_2(conv_out)
-    conv_3 = Conv1D(filters=opt['conv']['n_kernels'][index][2], activation='relu',
-                kernel_size=window_size - target_timestep + 1)
-    conv_out_3 = conv_3(conv_out_2)
+    # print(weighted_input.shape)
+    
 
     rnn_1 = Bidirectional(
         LSTM(units=opt['lstm']['bi_unit'][index], return_sequences=True, return_state=True, 
             dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index]))
 
-    rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(conv_out_3)
+    rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(sum_input)
     state_h = Concatenate(axis=-1)([forward_h, backward_h])
     state_c = Concatenate(axis=-1)([forward_c, backward_c])
 
@@ -33,10 +31,20 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
                 dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
     rnn_out_3 = rnn_3(rnn_out_1, initial_state=[state_h, state_c])
 
+    # conv = Conv1D(filters=opt['conv']['n_kernels'][index][0], 
+    #             kernel_size=opt['conv']['kernel_s'][index][0], activation='relu', padding='same')
+    # conv_out = conv(rnn_out_3)
+    # conv_2 = Conv1D(filters=opt['conv']['n_kernels'][index][1], 
+    #             kernel_size=opt['conv']['kernel_s'][index][1], activation='relu', padding='same')
+    # conv_out_2 = conv_2(conv_out)
+    conv_3 = Conv1D(filters=opt['conv']['n_kernels'][index][2], activation='relu',
+                kernel_size=window_size - target_timestep + 1)
+    conv_out_3 = conv_3(rnn_out_3)
+
     dense_3 = TimeDistributed(Dense(units=output_dim))
     
     # print(rnn_out_3.shape)
-    outs = dense_3(rnn_out_3)
+    outs = dense_3(conv_out_3)
     # print(outs.shape)
     model = Model(inputs=input, outputs=outs)
 
@@ -80,15 +88,16 @@ if __name__ == '__main__':
         child_config = yaml.load(f, Loader=yaml.FullLoader)
         print(child_config)
         model = model_builder(0, child_config['rnn_cnn'], input_dim=20, output_dim=1, target_timestep=7)
+        print(model.summary())
         x = np.random.rand(10,30, 20)
         y = model(x)
         # fake training
-        x = np.random.rand(4000, 30, 20)
-        y = np.random.rand(4000, 7, 1)
-        model, _ = train_model(model, 0, x, y, 200, 50)
-        y_pred = model.predict(x)
+        # x = np.random.rand(4000, 30, 20)
+        # y = np.random.rand(4000, 7, 1)
+        # model, _ = train_model(model, 0, x, y, 200, 50)
+        # y_pred = model.predict(x)
 
-        import matplotlib.pyplot as plt 
-        plt.plot(y[:, 0, :])
-        plt.plot(y_pred[:, 0, :])
-        plt.savefig('test.png')
+        # import matplotlib.pyplot as plt 
+        # plt.plot(y[:, 0, :])
+        # plt.plot(y_pred[:, 0, :])
+        # plt.savefig('test.png')
