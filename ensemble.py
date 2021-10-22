@@ -257,10 +257,10 @@ class Ensemble:
         input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
         input_val_x = Input(shape=(self.window_size, self.input_dim))
         
-        rnn_att = LSTM(units=self.input_dim, return_sequences=True, return_state=False)
-        component_att_weight = softmax(rnn_att(input_val_x), axis=-1)
-        weighted_input = tf.math.multiply(input_val_x, component_att_weight)
-        sum_input = tf.math.reduce_sum(weighted_input, axis=2, keepdims=True)
+        # rnn_att = LSTM(units=self.input_dim, return_sequences=True, return_state=False)
+        # component_att_weight = softmax(rnn_att(input_val_x), axis=-1)
+        # weighted_input = tf.math.multiply(input_val_x, component_att_weight)
+        # sum_input = tf.math.reduce_sum(weighted_input, axis=2, keepdims=True)
 
         rnn_1 = Bidirectional(
             LSTM(units=64,
@@ -268,7 +268,13 @@ class Ensemble:
                  return_state=True,
                  dropout=self.dropout,
                  recurrent_dropout=self.dropout))
-        rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(weighted_input)
+        # rnn_1 = LSTM(units=128,
+        #         return_sequences=True,
+        #         return_state=True,
+        #         dropout=self.dropout,
+        #         recurrent_dropout=self.dropout)
+        rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(input_val_x)
+        # rnn_1_out, state_h, state_c = rnn_1(input_val_x)
         state_h = Concatenate(axis=-1)([forward_h, backward_h])
         state_c = Concatenate(axis=-1)([forward_c, backward_c])
 
@@ -289,7 +295,7 @@ class Ensemble:
         attention_vec = Wc(context_and_rnn_2_out)
 
         # attention = MultiHeadAttention(self.child_config['num'], 2)
-        # context_vec = attention(rnn_2_out, state_h)
+        # context_vec = attention(rnn_2_out, tf.expand_dims(state_h, axis=1))
         # context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, rnn_2_out])
         # Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
         # attention_vec = Wc(context_and_rnn_2_out)
@@ -483,6 +489,7 @@ class Ensemble:
         _str = f'Model: H: R2: {np.mean(eval_df["var_score_h"].tolist())} MSE: {np.mean(eval_df["mse_h"].tolist())} MAE: {np.mean(eval_df["mae_h"].tolist())} MAPE: {np.mean(eval_df["mape_h"].tolist())} \
                             \nQ: R2: {np.mean(eval_df["var_score_q"].tolist())} MSE: {np.mean(eval_df["mse_q"].tolist())} MAE: {np.mean(eval_df["mae_q"].tolist())} MAPE: {np.mean(eval_df["mape_q"].tolist()) }\n'
 
+        print(_str)
         with open(self.log_dir + 'evaluate_score_total.txt', 'a') as f:
             f.write(_str)
 
