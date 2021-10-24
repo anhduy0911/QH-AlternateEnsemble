@@ -80,6 +80,7 @@ def train_model(model, index, x_train, y_train, batch_size, epochs, fraction=0.1
                         batch_size=batch_size,
                         epochs=epochs,
                         callbacks=callbacks,
+                        verbose=0,
                         validation_split=fraction)
 
     return model, history

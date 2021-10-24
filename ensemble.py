@@ -15,7 +15,7 @@ from utils.reprocess_daily import ssa_extract_data, extract_data, transform_ssa
 from utils.data_loader import get_ssa_data, get_input_data
 from tensorflow.keras.activations import softmax
 
-
+seed = 3407 # https://arxiv.org/abs/2109.08203
 
 def getMonth(_str):
     return _str.split('/')[1]
@@ -166,6 +166,8 @@ class Ensemble:
         '''
         models = []
         for i in range(self.child_config['num']):
+            np.random.seed(seed + i)
+            tf.random.set_seed(seed + i)
             if self.model_kind == 'rnn_cnn':
                 from model.models.multi_rnn_cnn import model_builder
                 model = model_builder(i, self.child_config, self.input_dim, self.output_dim, self.window_size, self.time_step_eval)
@@ -333,6 +335,7 @@ class Ensemble:
                                             batch_size=self.batch_size,
                                             epochs=self.epochs_out,
                                             callbacks=callbacks,
+                                            verbose=0, 
                                             validation_split=0.1)
 
             if history is not None:
@@ -499,8 +502,8 @@ class Ensemble:
 
 if __name__ == '__main__':
     K.clear_session()
-    np.random.seed(99)
-    tf.random.set_seed(99)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
 
     sys.path.append(os.getcwd())
     parser = argparse.ArgumentParser()
