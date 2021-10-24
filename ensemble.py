@@ -189,6 +189,8 @@ class Ensemble:
         # print(x_train_out.shape)
         if (self.mode == 'train' or self.mode == 'train-inner'):
             for i in range(self.child_config['num']):
+                np.random.seed(seed + i)
+                tf.random.set_seed(seed + i)
                 if self.model_kind == 'rnn_cnn':
                     from model.models.multi_rnn_cnn import train_model
                     self.inner_models[i], _ = train_model(self.inner_models[i], i, 
