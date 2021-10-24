@@ -121,7 +121,7 @@ class Ensemble:
                                                 cols_gt=self.cols_gt, mode=self.norm_method)
 
             xq = transform_ssa(xq, self.default_n, self.sigma_lst)
-                                                
+            self.n_comps = xq.shape[-1]                                 
             # xq, xh, scaler, y_gt = ssa_extract_data(gtruth=QH_stacked,
             #                                         q_ssa=Q_comps,
             #                                         h_ssa= H_comps,
@@ -170,7 +170,7 @@ class Ensemble:
             # tf.random.set_seed(seed + i)
             if self.model_kind == 'rnn_cnn':
                 from model.models.multi_rnn_cnn import model_builder
-                model = model_builder(i, self.child_config, self.input_dim, self.output_dim, self.window_size, self.time_step_eval)
+                model = model_builder(i, self.child_config, input_dim=self.input_dim, n_comps=self.n_comps, output_dim=self.output_dim, window_size=self.window_size, target_timestep=self.time_step_eval)
                 models.append(model)
 
         print(models[0].summary())
@@ -259,8 +259,10 @@ class Ensemble:
 
         # modify the dim here
         input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
-        input_val_x = Input(shape=(self.window_size, self.input_dim))
-        
+        input_val_x = Input(shape=(self.window_size, self.input_dim, self.n_comps))
+        reconstruct = Dense(1, use_bias=False)
+        weighted_input_x = reconstruct(input_val_x)
+        weighted_input_x = tf.squeeze(weighted_input_x, axis=-1)
         # rnn_att = LSTM(units=self.input_dim, return_sequences=True, return_state=False)
         # component_att_weight = softmax(rnn_att(input_val_x), axis=-1)
         # weighted_input = tf.math.multiply(input_val_x, component_att_weight)
@@ -277,7 +279,7 @@ class Ensemble:
         #         return_state=True,
         #         dropout=self.dropout,
         #         recurrent_dropout=self.dropout)
-        rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(input_val_x)
+        rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(weighted_input_x)
         # rnn_1_out, state_h, state_c = rnn_1(input_val_x)
         state_h = Concatenate(axis=-1)([forward_h, backward_h])
         state_c = Concatenate(axis=-1)([forward_c, backward_c])

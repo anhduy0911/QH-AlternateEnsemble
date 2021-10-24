@@ -70,10 +70,10 @@ def transform_ssa(input, n, sigma_lst):
         q_comp = lst_Q_ssa.TS_comps
         h_comp = lst_H_ssa.TS_comps
 
-        q_merged = lst_Q_ssa.reconstruct(sigma_lst)
-        h_merged = lst_H_ssa.reconstruct(sigma_lst)
-        qs.append(q_merged)
-        hs.append(h_merged)
+        # q_merged = lst_Q_ssa.reconstruct(sigma_lst)
+        # h_merged = lst_H_ssa.reconstruct(sigma_lst)
+        qs.append(q_comp)
+        hs.append(h_comp)
     
     qs = np.array(qs)
     hs = np.array(hs)
