@@ -3,6 +3,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.optimizers import Adam, Adadelta, RMSprop
 from tensorflow.keras.activations import softmax
+from utils.weighted_comps import WeightedComps, WeightedCompsLayer
 import numpy as np
 import tensorflow as tf 
 
@@ -20,7 +21,7 @@ def model_builder(index, opt, input_dim=2, n_comps=10, output_dim=2, window_size
     # rnn_1 = Bidirectional(
     #     LSTM(units=opt['lstm']['bi_unit'][index], return_sequences=True, return_state=True, 
     #         dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index]))
-    reconstruct = Dense(1, use_bias=False)
+    reconstruct = Dense(1, use_bias=False, kernel_constraint=WeightedComps())
     weighted_input = reconstruct(input)
     weighted_input = tf.squeeze(weighted_input, axis=-1)
     rnn_1 = LSTM(units=opt['lstm']['bi_unit'][index] * 2, return_sequences=True, return_state=True, 

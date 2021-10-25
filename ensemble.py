@@ -14,6 +14,7 @@ from utils.ssa import SSA
 from utils.reprocess_daily import ssa_extract_data, extract_data, transform_ssa
 from utils.data_loader import get_ssa_data, get_input_data
 from tensorflow.keras.activations import softmax
+from utils.weighted_comps import WeightedComps
 
 seed = 99
 
@@ -260,7 +261,7 @@ class Ensemble:
         # modify the dim here
         input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
         input_val_x = Input(shape=(self.window_size, self.input_dim, self.n_comps))
-        reconstruct = Dense(1, use_bias=False)
+        reconstruct = Dense(1, use_bias=False, kernel_constraint=WeightedComps())
         weighted_input_x = reconstruct(input_val_x)
         weighted_input_x = tf.squeeze(weighted_input_x, axis=-1)
         # rnn_att = LSTM(units=self.input_dim, return_sequences=True, return_state=False)
