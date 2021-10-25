@@ -77,7 +77,7 @@ def transform_ssa(input, n, sigma_lst):
     
     qs = np.array(qs)
     hs = np.array(hs)
-    result = np.concatenate((qs, hs), axis=2)
+    result = np.concatenate((qs[:,:, np.newaxis], hs[:,:, np.newaxis]), axis=2)
     print(result.shape)
     return result
     

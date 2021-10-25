@@ -14,7 +14,7 @@ from utils.ssa import SSA
 from utils.reprocess_daily import ssa_extract_data, extract_data, transform_ssa
 from utils.data_loader import get_ssa_data, get_input_data
 from tensorflow.keras.activations import softmax
-
+from utils.custom_losses import shrinkage_loss
 
 
 def getMonth(_str):
@@ -304,7 +304,7 @@ class Ensemble:
         output = dense_4(attention_vec)
 
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
-        model.compile(loss='mse', optimizer='adam', metrics=['mae', 'mape'])
+        model.compile(loss=shrinkage_loss, optimizer='adam', metrics=['mae', 'mape'])
 
         model.summary()
         return model

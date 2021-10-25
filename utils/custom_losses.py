@@ -9,3 +9,15 @@ def shrinkage_loss(y_pred, y_gt):
     l2 = be.square(diff)
 
     return weight * l2
+
+def focal_loss(y_pred, y_gt):
+    diff = be.abs(y_pred - y_gt)
+    return be.pow(diff, 3)
+
+def linex_loss(y_pred, y_gt):
+    alpha = -1
+    diff = y_pred - y_gt
+    # diff = y_pred / y_gt - 1
+    exp = be.exp(alpha * diff)
+    linear = alpha * diff 
+    return exp - linear - 1
