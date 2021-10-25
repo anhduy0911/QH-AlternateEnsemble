@@ -3,7 +3,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.optimizers import Adam, Adadelta, RMSprop
 from tensorflow.keras.activations import softmax
-from utils.weighted_comps import WeightedComps, WeightedCompsLayer
+from utils.weighted_comps import WeightedComps
 import numpy as np
 import tensorflow as tf 
 
