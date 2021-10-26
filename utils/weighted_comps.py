@@ -6,4 +6,6 @@ class WeightedComps(tf.keras.constraints.Constraint):
   Using softmax and multiply with input shape.
   """
   def __call__(self, w):
-    return tf.exp(w) / tf.reduce_sum(tf.exp(w), axis=0) * w.shape[0]
+    # print(f'WEIGHT SHAPE: {w.shape}')
+    # return tf.nn.softmax(w, axis=0) * w.shape[0]
+    return w

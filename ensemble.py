@@ -261,9 +261,13 @@ class Ensemble:
         # modify the dim here
         input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
         input_val_x = Input(shape=(self.window_size, self.input_dim, self.n_comps))
-        reconstruct = Dense(1, use_bias=False, kernel_constraint=WeightedComps())
-        weighted_input_x = reconstruct(input_val_x)
-        weighted_input_x = tf.squeeze(weighted_input_x, axis=-1)
+        
+        reconstruct = Dense(self.default_n, use_bias=False, kernel_constraint=WeightedComps())
+        reconstruct_weight = reconstruct(input_val_x)
+        reconstruct_weight = tf.nn.softmax(reconstruct_weight, axis=-1) * self.default_n
+        weighted_input = tf.math.multiply(input_val_x, reconstruct_weight)
+        sum_input = tf.math.reduce_sum(weighted_input, axis=-1, keepdims=True)
+        weighted_input_x = tf.squeeze(sum_input, axis=-1)
         # rnn_att = LSTM(units=self.input_dim, return_sequences=True, return_state=False)
         # component_att_weight = softmax(rnn_att(input_val_x), axis=-1)
         # weighted_input = tf.math.multiply(input_val_x, component_att_weight)
