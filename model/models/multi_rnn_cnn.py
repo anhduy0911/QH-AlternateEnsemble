@@ -6,6 +6,7 @@ from tensorflow.keras.activations import softmax
 from utils.weighted_comps import WeightedComps
 import numpy as np
 import tensorflow as tf 
+from utils.custom_losses import shrinkage_loss, linex_loss
 
 def model_builder(index, opt, input_dim=2, n_comps=10, output_dim=2, window_size=30, target_timestep=1):
     ''' 
@@ -63,7 +64,10 @@ def model_builder(index, opt, input_dim=2, n_comps=10, output_dim=2, window_size
         optimizer = Adadelta(learning_rate=opt['lr'][index])
     else:
         optimizer = Adam(learning_rate=opt['lr'][index],amsgrad=False)
-    model.compile(loss=opt['loss'], optimizer=optimizer, metrics=['mae', 'mape'])
+    if opt['loss'] != 'custom':
+        model.compile(loss=opt['loss'], optimizer=optimizer, metrics=['mae', 'mape'])
+    else:
+        model.compile(loss=linex_loss, optimizer=optimizer, metrics=['mae', 'mape'])
 
     return model
 

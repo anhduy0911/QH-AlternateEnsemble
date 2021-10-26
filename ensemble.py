@@ -15,8 +15,10 @@ from utils.reprocess_daily import ssa_extract_data, extract_data, transform_ssa
 from utils.data_loader import get_ssa_data, get_input_data
 from tensorflow.keras.activations import softmax
 from utils.weighted_comps import WeightedComps
+from utils.custom_losses import shrinkage_loss, linex_loss
 
 seed = 99
+
 
 def getMonth(_str):
     return _str.split('/')[1]
@@ -315,7 +317,7 @@ class Ensemble:
         output = dense_4(attention_vec)
 
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
-        model.compile(loss='mse', optimizer='adam', metrics=['mae', 'mape'])
+        model.compile(loss=linex_loss, optimizer='adam', metrics=['mae', 'mape'])
 
         model.summary()
         return model
