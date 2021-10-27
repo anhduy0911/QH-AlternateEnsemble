@@ -15,7 +15,7 @@ def focal_loss(y_pred, y_gt):
     return be.pow(diff, 3)
 
 def linex_loss(y_pred, y_gt):
-    alpha = -0.05
+    alpha = -0.1
     diff = y_pred - y_gt
     # diff = y_pred / y_gt - 1
     exp = be.exp(alpha * diff)
