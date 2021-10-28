@@ -262,7 +262,7 @@ class Ensemble:
         # weighted_input = tf.math.multiply(input_val_x, component_att_weight)
         # sum_input = tf.math.reduce_sum(weighted_input, axis=2, keepdims=True)
         rnn_att = AttentionRNN(self.batch_size, self.window_size, self.target_timestep, self.output_dim)
-        weighted_input = rnn_att(input_val_x)
+        weighted_input = rnn_att(tf.transpose(input_val_x, perm=[0,2,1]))
 
         rnn_1 = Bidirectional(
             LSTM(units=64,
@@ -311,6 +311,17 @@ class Ensemble:
         model.summary()
         return model
 
+    def data_cut_outmodel(self, x_submodel, x_val, y, mode='train'):
+        inshape = x_submodel.shape[0]
+        valid_size = int(inshape / self.batch_size)
+        # print(f'the total length seq: {valid_size * self.batch_size}')
+        if mode == 'train':
+            train_sz = valid_size * self.batch_size - self.batch_size * 2
+            val_size = valid_size * self.batch_size
+            return x_submodel[:train_sz], x_val[:train_sz], y[:train_sz], x_submodel[train_sz:val_size], x_val[train_sz:val_size], y[train_sz:val_size]
+        else:
+            return x_submodel[:valid_size * self.batch_size], x_val[:valid_size * self.batch_size], y[:valid_size * self.batch_size]
+
     def train_model_outer(self):
         '''
         func for train the main model
@@ -329,13 +340,14 @@ class Ensemble:
             # callbacks.append(lr_schedule)
             callbacks.append(early_stop)
             callbacks.append(checkpoint)
-
-            history = self.outer_model.fit(x=[self.data['x_train_out_submodel'], self.data['x_test_in']],
-                                            y=self.data['y_train_out'],
+            
+            dat_sub, dat_val, y_tr, dat_sub_val, dat_val_val, y_val = self.data_cut_outmodel(self.data['x_train_out_submodel'], self.data['x_test_in'], self.data['y_train_out'])
+            history = self.outer_model.fit(x=[dat_sub, dat_val],
+                                            y=y_tr,
                                             batch_size=self.batch_size,
                                             epochs=self.epochs_out,
                                             callbacks=callbacks,
-                                            validation_split=0.1)
+                                            validation_data=([dat_sub_val, dat_val_val], y_val))
 
             if history is not None:
                 self.plot_training_history(history)
@@ -399,13 +411,15 @@ class Ensemble:
         '''
         Mutistep prediction, simutaneously
         '''    
-        pred = self.outer_model.predict(x=[self.data['x_test_out_submodel'], self.data['x_test_out']], 
+        x_sub, x_val, y_test = self.data_cut_outmodel(self.data['x_test_out_submodel'], self.data['x_test_out'], self.data['y_test_out'], mode='test')
+        print(x_sub.shape)
+        pred = self.outer_model.predict(x=[x_sub, x_val], 
                                         batch_size=self.batch_size)
         
         # print(pred.shape) 
         # print(self.data['y_test_out'].shape)   
         
-        return pred, self.data['y_test_out']
+        return pred, y_test
     
     def retransform_prediction(self):
         '''
@@ -417,7 +431,7 @@ class Ensemble:
             result, y_test = self.multistep_prediction()
 
         mask = np.zeros(self.data['shape'])
-        test_shape = self.data['y_test_out'].shape[0]
+        test_shape = y_test.shape[0]
 
         lst_full_date = pd.read_csv(self.data_file)['date'].tolist()
         len_df = int(len(lst_full_date) * (1 - self.dt_split_point_outer) - 1)
@@ -503,6 +517,7 @@ if __name__ == '__main__':
     K.clear_session()
     np.random.seed(99)
     tf.random.set_seed(99)
+    tf.config.run_functions_eagerly(True)
 
     sys.path.append(os.getcwd())
     parser = argparse.ArgumentParser()

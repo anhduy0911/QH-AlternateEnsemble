@@ -12,14 +12,14 @@ class AttentionRNN(layers.Layer):
         self.output_dim = output_dim
         self.hidden_state = hidden_state
 
-        self.cell = LSTMCell(self.hidden_state, state_is_tuple=True)
+        self.cell = LSTMCell(self.hidden_state)
         self.dense_state = Dense(self.output_dim)
         self.dense = Dense(self.output_dim, use_bias=False)
 
 
     def _attention(self, hidden_state, cell_state, input):
         attn_input = tf.concat([hidden_state, cell_state], axis=1)
-        attn_input = tf.reshape(tf.tile(attn_input, [1, input.shape[1]]), [self.batch_size, input.shape[1], -1])
+        attn_input = tf.reshape(tf.tile(attn_input, [1, input.shape[1]]), [self.batch_size, input.shape[1], hidden_state.shape[1] * 2])
 
         z = tf.tanh(self.dense_state(attn_input)) + self.dense(input)
         presoftmax = Dense(1)(z)
@@ -28,7 +28,7 @@ class AttentionRNN(layers.Layer):
 
 
     def call(self, input):
-        initial_state = self.cell.zero_state(self.batch_size, tf.float32)
+        initial_state = self.cell.get_initial_state(input, self.batch_size, tf.float32)
         state = initial_state
         s, h = state
         outputs = []
@@ -41,8 +41,18 @@ class AttentionRNN(layers.Layer):
             s, h = state
             outputs.append(h)
 
-        result = tf.concat(outputs, axis=1)
+        result = tf.transpose(tf.stack(outputs, axis=0), perm=(1,0,2))
 
         return result
-    
+
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'batch_size': self.batch_size,
+            'window_size': self.window_size,
+            'target_timesteps': self.target_timesteps,
+            'output_dim': self.output_dim,
+            'hidden_state': self.hidden_state
+        })
+        return config    
 
