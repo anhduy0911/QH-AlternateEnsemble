@@ -43,6 +43,7 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     conv_3 = Conv1D(filters=opt['conv']['n_kernels'][index][2], activation='relu',
                 kernel_size=window_size - target_timestep + 1)
     conv_out_3 = conv_3(attention_vec)
+    # out_att_vec = attention_vec[:, -target_timestep:]
 
     dense_3 = TimeDistributed(Dense(units=output_dim))
     
@@ -76,7 +77,7 @@ def train_model(model, index, x_train, y_train, batch_size, epochs, fraction=0.1
 
     #early_stop = epochs == 250
     if (early_stop):
-        early_stop = EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True)
+        early_stop = EarlyStopping(monitor='val_loss', patience=patience)
         callbacks.append(early_stop)
 
     history = model.fit(x=x_train,

@@ -19,14 +19,12 @@ data:
   time_step_eval: 7 # the roll prediction timestep - use for multistep prediction
 model:
   child:
-    num: 6 #number of children
+    num: 4 #number of children
     epoch: 
+      - 25
       - 50
-      - 100
-      - 150
-      - 200
-      - 250
-      - 300
+      - 75
+      - 5
     dropout: 
       - 0
       - 0
@@ -40,5 +38,5 @@ model:
   batch_size: 128
   dropout: 0
 ssa:
-  default_n: 20 # default window size
-  sigma_lst: [0,1,13,15,18] # default_sigma_lst
+  default_n: 10 # default window size
+  sigma_lst: [0,1,2,3,4,5,6,7,8] # default_sigma_lst
