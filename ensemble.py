@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from tensorflow.keras.layers import Dense, Input, Bidirectional, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed, MultiHeadAttention, Attention
 from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
 import sys
 import os
 import argparse
@@ -304,7 +305,8 @@ class Ensemble:
         output = dense_4(attention_vec)
 
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
-        model.compile(loss=linex_loss, optimizer='adam', metrics=['mae', 'mape'])
+        optimizer = Adam(learning_rate=0.0001,amsgrad=False)
+        model.compile(loss=linex_loss, optimizer=Adam, metrics=['mae', 'mape'])
 
         model.summary()
         return model
