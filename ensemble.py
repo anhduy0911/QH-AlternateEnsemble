@@ -15,7 +15,7 @@ from utils.reprocess_daily import ssa_extract_data, extract_data, transform_ssa
 from utils.data_loader import get_ssa_data, get_input_data
 from tensorflow.keras.activations import softmax
 from utils.custom_losses import shrinkage_loss, linex_loss
-
+from utils.custom_att_rnn import AttentionRNN
 
 def getMonth(_str):
     return _str.split('/')[1]
@@ -261,6 +261,8 @@ class Ensemble:
         # component_att_weight = softmax(rnn_att(input_val_x), axis=-1)
         # weighted_input = tf.math.multiply(input_val_x, component_att_weight)
         # sum_input = tf.math.reduce_sum(weighted_input, axis=2, keepdims=True)
+        rnn_att = AttentionRNN(self.batch_size, self.window_size, self.target_timestep, self.output_dim)
+        weighted_input = rnn_att(input_val_x)
 
         rnn_1 = Bidirectional(
             LSTM(units=64,
@@ -273,7 +275,7 @@ class Ensemble:
         #         return_state=True,
         #         dropout=self.dropout,
         #         recurrent_dropout=self.dropout)
-        rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(input_val_x)
+        rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(weighted_input)
         # rnn_1_out, state_h, state_c = rnn_1(input_val_x)
         state_h = Concatenate(axis=-1)([forward_h, backward_h])
         state_c = Concatenate(axis=-1)([forward_c, backward_c])
