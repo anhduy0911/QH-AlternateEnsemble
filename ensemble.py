@@ -104,7 +104,7 @@ class Ensemble:
         '''
         # dat = get_input_data(self.data_file, self.default_n, self.sigma_lst)
         dat = pd.read_csv(self.data_file, header=0)
-        dat = dat[['Q', 'H']]
+        dat = dat[['Q', 'H', 'day_sin', 'day_cos']]
         dat = dat.to_numpy()
         # QH_stacked, Q_comps, H_comps  = get_ssa_data(self.data_file, self.default_n)
 
@@ -264,8 +264,8 @@ class Ensemble:
         input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
         input_val_x = Input(shape=(self.window_size, self.input_dim, self.n_comps))
         
-        reconstruct = Dense(self.default_n, use_bias=False, kernel_constraint=WeightedComps())
-        reconstruct_weight = reconstruct(input_val_x)
+        self_att = MultiHeadAttention(num_heads=4, key_dim=10, attention_axes=(2, 3))
+        reconstruct_weight = self_att(input_val_x, input_val_x)
         reconstruct_weight = tf.nn.softmax(reconstruct_weight, axis=-1) * self.default_n
         weighted_input = tf.math.multiply(input_val_x, reconstruct_weight)
         sum_input = tf.math.reduce_sum(weighted_input, axis=-1, keepdims=True)

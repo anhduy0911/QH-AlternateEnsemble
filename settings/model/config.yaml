@@ -1,6 +1,6 @@
 log_dir: ./log/model/
 data:
-  data_file: ./data/SonTay.csv
+  data_file: ./data/mod_SonTay.csv
   split_point_outer: 0.05
   split_point_inner: 0.4
   norm_method: min_max
@@ -8,6 +8,8 @@ data:
   cols_x: #column used for input - the SSA-filtered Q and H
     - 0
     - 1
+    - 2
+    - 3
   cols_y: #column used as groundtruth during training process - the SSA-filtered Q and H
     - 0
     - 1

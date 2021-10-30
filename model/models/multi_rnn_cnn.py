@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Conv1D, Input, Bidirectional, LSTM, Concatenate, Reshape, TimeDistributed, Dense, Attention
+from tensorflow.keras.layers import Conv1D, Input, MultiHeadAttention, LSTM, Concatenate, Reshape, TimeDistributed, Dense, Attention
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.optimizers import Adam, Adadelta, RMSprop
@@ -22,8 +22,8 @@ def model_builder(index, opt, input_dim=2, n_comps=10, output_dim=2, window_size
     # rnn_1 = Bidirectional(
     #     LSTM(units=opt['lstm']['bi_unit'][index], return_sequences=True, return_state=True, 
     #         dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index]))
-    reconstruct = Dense(n_comps, use_bias=False, kernel_constraint=WeightedComps())
-    reconstruct_weight = reconstruct(input)
+    self_att = MultiHeadAttention(num_heads=4, key_dim=10, attention_axes=(2, 3))
+    reconstruct_weight = self_att(input, input)
     reconstruct_weight = tf.nn.softmax(reconstruct_weight, axis=-1) * n_comps
     weighted_input = tf.math.multiply(input, reconstruct_weight)
     sum_input = tf.math.reduce_sum(weighted_input, axis=-1, keepdims=True)
