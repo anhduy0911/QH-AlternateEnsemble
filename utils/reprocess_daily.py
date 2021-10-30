@@ -27,7 +27,7 @@ def normalize_data(dataframe, mode, ignored_cols=[]):
         scaler_gtr.fit(dataframe)
         data_norm = scaler_gtr.transform(dataframe)
     
-    if ignore_cols:
+    if ignored_cols:
         data_norm[:, ignored_cols] = dataframe[:, ignored_cols]
     
     return data_norm, scaler_gtr
