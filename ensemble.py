@@ -65,6 +65,7 @@ class Ensemble:
         self.cols_x = self._data_kwargs.get('cols_x')
         self.cols_y = self._data_kwargs.get('cols_y')
         self.cols_gt = self._data_kwargs.get('cols_gt')
+        self.ignored_cols = self._data_kwargs.get('ignored_cols')
         self.pred_factor = self._data_kwargs.get('pred_factor')
         self.target_timestep = self._data_kwargs.get('target_timestep')
         self.window_size = self._data_kwargs.get('window_size')
@@ -121,7 +122,8 @@ class Ensemble:
             xq, xh, scaler, y_gt = extract_data(dataframe=dat, window_size=self.window_size, 
                                                 target_timstep=self.target_timestep,
                                                 cols_x=self.cols_x, cols_y=self.cols_y,
-                                                cols_gt=self.cols_gt, mode=self.norm_method)
+                                                cols_gt=self.cols_gt, mode=self.norm_method,
+                                                ignored_cols=self.ignored_cols)
 
             xq = transform_ssa(xq, self.default_n, self.sigma_lst)
             self.n_comps = xq.shape[-1]                                 

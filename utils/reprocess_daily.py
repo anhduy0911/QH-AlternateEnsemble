@@ -2,44 +2,42 @@ import pandas as pd
 import numpy as np
 from utils.ssa import SSA
 
-def normalize_data(dataframe, mode):
+def normalize_data(dataframe, mode, ignored_cols=[]):
     if mode == 'abs':
         from sklearn.preprocessing import MaxAbsScaler
-        max_abs = MaxAbsScaler(copy=True)  #save for retransform later
-        max_abs.fit(dataframe)
-        data_norm = max_abs.transform(dataframe)
-
-        return data_norm, max_abs
+        scaler_gtr = MaxAbsScaler(copy=True)  #save for retransform later
+        scaler_gtr.fit(dataframe)
+        data_norm = scaler_gtr.transform(dataframe)
 
     if mode == 'robust':
         from sklearn.preprocessing import RobustScaler
-        robust = RobustScaler(copy=True)  #save for retransform later
-        robust.fit(dataframe)
-        data_norm = robust.transform(dataframe)
-
-        return data_norm, robust
+        scaler_gtr = RobustScaler(copy=True)  #save for retransform later
+        scaler_gtr.fit(dataframe)
+        data_norm = scaler_gtr.transform(dataframe)
 
     if mode == 'min_max':
         from sklearn.preprocessing import MinMaxScaler
-        minmax = MinMaxScaler(feature_range=(0, 1), copy=True)  #save for retransform later
-        minmax.fit(dataframe)
-        data_norm = minmax.transform(dataframe)
+        scaler_gtr = MinMaxScaler(feature_range=(0, 1), copy=True)  #save for retransform later
+        scaler_gtr.fit(dataframe)
+        data_norm = scaler_gtr.transform(dataframe)
 
-        return data_norm, minmax
     if mode == 'std':
         from sklearn.preprocessing import StandardScaler
-        stdscaler = StandardScaler(copy=True, with_mean=True, with_std=True)
-        stdscaler.fit(dataframe)
-        data_norm = stdscaler.transform(dataframe)
+        scaler_gtr = StandardScaler(copy=True, with_mean=True, with_std=True)
+        scaler_gtr.fit(dataframe)
+        data_norm = scaler_gtr.transform(dataframe)
+    
+    if ignore_cols:
+        data_norm[:, ignored_cols] = dataframe[:, ignored_cols]
+    
+    return data_norm, scaler_gtr
 
-        return data_norm, stdscaler
 
-
-def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[], cols_gt=[],mode='std'):
+def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[], cols_gt=[],mode='std', ignored_cols=[]):
     '''
     The function for splitting the data
     '''
-    dataframe, scaler = normalize_data(dataframe, mode)
+    dataframe, scaler = normalize_data(dataframe, mode, ignored_cols)
 
     xs = [] # return input data
     ys = [] # return output data

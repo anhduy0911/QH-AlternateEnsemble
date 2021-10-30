@@ -16,6 +16,9 @@ data:
   cols_gt: #column used as groudtruth during test phase - the raw Q and H
     - 0
     - 1
+  ignored_cols:
+    - 2
+    - 3
   window_size: 30
   target_timestep: 7 # the actual number of timestep output by model - only 1 time step
   time_step_eval: 7 # the roll prediction timestep - use for multistep prediction
