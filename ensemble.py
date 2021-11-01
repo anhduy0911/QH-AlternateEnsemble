@@ -116,35 +116,25 @@ class Ensemble:
         train_inner = int((dat.shape[0] - test_outer) * (1 - self.dt_split_point_inner))
         
         if self.model_kind == 'rnn_cnn':
-            xq, xh, scaler, y_gt = extract_data(dataframe=dat, window_size=self.window_size, 
+            xq, y_gt, scaler, y_eval = extract_data(dataframe=dat, window_size=self.window_size, 
                                                 target_timstep=self.target_timestep,
+                                                time_step_eval=self.time_step_eval,
                                                 cols_x=self.cols_x, cols_y=self.cols_y,
                                                 cols_gt=self.cols_gt, mode=self.norm_method)
 
             xq = transform_ssa(xq, self.default_n, self.sigma_lst)
                                                 
-            # xq, xh, scaler, y_gt = ssa_extract_data(gtruth=QH_stacked,
-            #                                         q_ssa=Q_comps,
-            #                                         h_ssa= H_comps,
-            #                                         window_size=self.window_size,
-            #                                         target_timstep=self.time_step_eval,
-            #                                         mode=self.norm_method)
+            x_train_in, y_gt_train_in, y_eval_train_in = xq[:train_inner, :], y_gt[:train_inner,:, :], y_eval[:train_inner,:, :]
+            x_test_in, y_gt_test_in, y_eval_test_in = xq[train_inner:-test_outer, :], y_gt[train_inner:-test_outer,:, :], y_eval[train_inner:-test_outer,:, :]
+            x_test_out, y_gt_test_out, y_eval_test_out = xq[-test_outer:, :],y_gt[-test_outer:, :, :], y_eval[-test_outer:, :, :]
             
-            # xq = np.concatenate((xq, xh), axis=2)
-            if self.pred_factor == 'q':
-                x_train_in, y_gt_train_in = xq[:train_inner, :], y_gt[:train_inner,:, :]
-                x_test_in, y_gt_test_in = xq[train_inner:-test_outer, :], y_gt[train_inner:-test_outer,:, :]
-                x_test_out, y_gt_test_out = xq[-test_outer:, :],y_gt[-test_outer:, :, :]
-            else:
-                x_train_in, y_gt_train_in = xh[:train_inner, :], y_gt[:train_inner, :, 1][:,:, np.newaxis]
-                x_test_in, y_gt_test_in = xh[train_inner:-test_outer, :], y_gt[train_inner:-test_outer,:, 1][:,:, np.newaxis]
-                x_test_out, y_gt_test_out = xh[-test_outer:, :],y_gt[-test_outer:,:, 1][:,:, np.newaxis]
                 
             for cat in ["train_in", "test_in", "test_out"]:
-                x, y_gt = locals()["x_" + cat], locals()["y_gt_" + cat]
+                x, y_gt, y_ev = locals()["x_" + cat], locals()["y_gt_" + cat], locals()["y_eval_" + cat]
                 print(cat, "x: ", x.shape, "ygtr: ", y_gt.shape)
                 data["x_" + cat] = x
                 data["y_" + cat] = y_gt
+                data["y_eval_" + cat] = y_ev
 
         data['scaler'] = scaler
         return data
@@ -169,7 +159,7 @@ class Ensemble:
         for i in range(self.child_config['num']):
             if self.model_kind == 'rnn_cnn':
                 from model.models.multi_rnn_cnn import model_builder
-                model = model_builder(i, self.child_config, self.input_dim, self.output_dim, self.window_size, self.time_step_eval)
+                model = model_builder(i, self.child_config, self.input_dim, self.output_dim, self.window_size, self.target_timestep)
                 models.append(model)
 
         print(models[0].summary())
@@ -222,14 +212,15 @@ class Ensemble:
            
             return x_train_out, x_test_out
         else: # this case when gen data during evaluation
-            x_test_out = np.zeros((self.child_config['num'], self.output_dim))
+            shape = data.shape
+            x_test_out = np.zeros((shape[0], self.child_config['num'], self.output_dim))
             for ind in range(self.child_config['num']):
                 # self.inner_models[ind].load_weights(self.log_dir + f'ModelPool/best_model_{self.pred_factor}_{ind}.hdf5')
                 # print(f'output val {ind}: {self.inner_models[ind].predict(data, batch_size=1)}')
-                x_test_out[ind, :] = self.inner_models[ind].predict(data, batch_size=1)
+                x_test_out[:, ind, :] = self.inner_models[ind].predict(data, batch_size=self.batch_size)
             # print('Now it go out bro')
             # here if apply attention then should not flatten out
-            x_test_out = x_test_out.reshape(1, -1)
+            x_test_out = x_test_out.reshape(shape[0], 1, -1)
             return x_test_out
 
     def data_out_generate(self, x_train_out, x_test_out):
@@ -394,7 +385,23 @@ class Ensemble:
         print(f'GTRUTH SHAPE: {gtruth.shape}')
 
         return result, gtruth
-    
+        
+    def roll_prediction_v2(self):
+        '''
+        Roll prediction to the actual target timestep
+        '''
+        x = self.data['x_test_out']
+        x_sub = self.data['x_test_out_submodel']
+        gt = self.data['y_eval_test_out']
+        predict = np.zeros_like(gt)
+
+        for i in range(self.time_step_eval):
+            pred = self.outer_model.predict(x=[x, x_sub], batch_size=self.batch_size)
+            x = np.append(x, pred, axis=1)[:, -self.window_size:, :]
+            x_sub = self.predict_in(data=x)
+            predict[:, i] = pred
+        
+        return predict, gt
     def multistep_prediction(self):
         '''
         Mutistep prediction, simutaneously
@@ -412,7 +419,7 @@ class Ensemble:
         func for convert the prediction to initial scale
         '''
         if self.target_timestep == 1:
-            result, y_test = self.roll_prediction()
+            result, y_test = self.roll_prediction_v2()
         else:
             result, y_test = self.multistep_prediction()
 

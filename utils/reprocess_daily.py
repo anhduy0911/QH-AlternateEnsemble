@@ -35,7 +35,7 @@ def normalize_data(dataframe, mode):
         return data_norm, stdscaler
 
 
-def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[], cols_gt=[],mode='std'):
+def extract_data(dataframe, window_size=5, target_timstep=1, time_step_eval=7, cols_x=[], cols_y=[], cols_gt=[],mode='std'):
     '''
     The function for splitting the data
     '''
@@ -53,10 +53,10 @@ def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[
             ygt.append(dataframe[i + window_size:i + window_size + target_timstep,
                        cols_gt])
     else:
-        for i in range(dataframe.shape[0] - window_size - target_timstep):
+        for i in range(dataframe.shape[0] - window_size - time_step_eval):
             xs.append(dataframe[i:i + window_size, cols_x])
-            ys.append(dataframe[i + window_size, cols_y])
-            ygt.append(dataframe[i + window_size, cols_gt])
+            ys.append(dataframe[i + window_size:i + window_size + target_timstep, cols_y])
+            ygt.append(dataframe[i + window_size:i + window_size + time_step_eval, cols_gt])
     return np.array(xs), np.array(ys), scaler, np.array(ygt)
 
 def transform_ssa(input, n, sigma_lst):
