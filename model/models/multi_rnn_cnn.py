@@ -12,21 +12,18 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     build the (index)th child model base on given param set
     '''
     input = Input(shape=(None, input_dim))
-    # rnn_att = LSTM(units=input_dim, return_sequences=True, return_state=False)
-    # component_att_weight = softmax(rnn_att(input), axis=-1)
-    # weighted_input = tf.math.multiply(input, component_att_weight)
-    # sum_input = tf.math.reduce_sum(weighted_input, axis=2, keepdims=True)
 
-    # print(weighted_input.shape)
-    # rnn_1 = Bidirectional(
-    #     LSTM(units=opt['lstm']['bi_unit'][index], return_sequences=True, return_state=True, 
-    #         dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index]))
+    conv = Conv1D(filters=opt['conv']['n_kernels'][index][0], kernel_size=opt['conv']['kernel_s'][index][0], activation='relu', padding='same')
+    conv_out = conv(input)
+
+    # conv2 = Conv1D(filters=opt['conv']['n_kernels'][index][1], kernel_size=opt['conv']['kernel_s'][index][1], activation='relu', padding='same')
+    # conv_out2 = conv2(conv_out)
 
     rnn_1 = LSTM(units=opt['lstm']['bi_unit'][index] * 2, return_sequences=True, return_state=True, 
             dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
 
     # rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(input)
-    rnn_out_1, state_h, state_c = rnn_1(input)
+    rnn_out_1, state_h, state_c = rnn_1(conv_out)
     # state_h = Concatenate(axis=-1)([forward_h, backward_h])
     # state_c = Concatenate(axis=-1)([forward_c, backward_c])
 

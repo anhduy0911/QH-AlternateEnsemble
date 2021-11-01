@@ -5,6 +5,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from tensorflow.keras.layers import Dense, Input, Bidirectional, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed, MultiHeadAttention, Attention
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
+
 import sys
 import os
 import argparse
@@ -258,26 +259,37 @@ class Ensemble:
         input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
         input_val_x = Input(shape=(self.window_size, self.input_dim))
         
+        conv = Conv1D(filters=32, kernel_size=3, padding='same', activation='relu')
+        conv_out = conv(input_val_x)
+
+        conv2 = Conv1D(filters=64, kernel_size=3, padding='same', activation='relu')
+        conv_out2 = conv2(conv_out)
+
         # rnn_att = LSTM(units=self.input_dim, return_sequences=True, return_state=False)
         # component_att_weight = softmax(rnn_att(input_val_x), axis=-1)
         # weighted_input = tf.math.multiply(input_val_x, component_att_weight)
         # sum_input = tf.math.reduce_sum(weighted_input, axis=2, keepdims=True)
+        # attention_in = Attention()
+        # context_vec = attention_in([input_val_x, input_val_x])
+        # Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
+        # attention_vec = Wc(context_vec)
+        # sum_input = Dense(units=2, use_bias=False)(attention_vec)
 
-        rnn_1 = Bidirectional(
-            LSTM(units=64,
-                 return_sequences=True,
-                 return_state=True,
-                 dropout=self.dropout,
-                 recurrent_dropout=self.dropout))
-        # rnn_1 = LSTM(units=128,
-        #         return_sequences=True,
-        #         return_state=True,
-        #         dropout=self.dropout,
-        #         recurrent_dropout=self.dropout)
-        rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(input_val_x)
-        # rnn_1_out, state_h, state_c = rnn_1(input_val_x)
-        state_h = Concatenate(axis=-1)([forward_h, backward_h])
-        state_c = Concatenate(axis=-1)([forward_c, backward_c])
+        # rnn_1 = Bidirectional(
+        #     LSTM(units=64,
+        #          return_sequences=True,
+        #          return_state=True,
+        #          dropout=self.dropout,
+        #          recurrent_dropout=self.dropout))
+        rnn_1 = LSTM(units=128,
+                return_sequences=True,
+                return_state=True,
+                dropout=self.dropout,
+                recurrent_dropout=self.dropout)
+        # rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(input_val_x)
+        rnn_1_out, state_h, state_c = rnn_1(conv_out2)
+        # state_h = Concatenate(axis=-1)([forward_h, backward_h])
+        # state_c = Concatenate(axis=-1)([forward_c, backward_c])
 
         # conv_att = Conv1D(filters=64, activation='relu', kernel_size=self.window_size - self.target_timestep + 1)
         # key_value = conv_att(rnn_1_out)
@@ -305,8 +317,8 @@ class Ensemble:
         output = dense_4(attention_vec)
 
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
-        optimizer = Adam(learning_rate=0.0001,amsgrad=False)
-        model.compile(loss=linex_loss, optimizer=Adam, metrics=['mae', 'mape'])
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
+        model.compile(loss=linex_loss, optimizer=optimizer, metrics=['mae', 'mape'])
 
         model.summary()
         return model
