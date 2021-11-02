@@ -2,44 +2,42 @@ import pandas as pd
 import numpy as np
 from utils.ssa import SSA
 
-def normalize_data(dataframe, mode):
+def normalize_data(dataframe, mode, ignored_cols=[]):
     if mode == 'abs':
         from sklearn.preprocessing import MaxAbsScaler
-        max_abs = MaxAbsScaler(copy=True)  #save for retransform later
-        max_abs.fit(dataframe)
-        data_norm = max_abs.transform(dataframe)
-
-        return data_norm, max_abs
+        scaler_gtr = MaxAbsScaler(copy=True)  #save for retransform later
+        scaler_gtr.fit(dataframe)
+        data_norm = scaler_gtr.transform(dataframe)
 
     if mode == 'robust':
         from sklearn.preprocessing import RobustScaler
-        robust = RobustScaler(copy=True)  #save for retransform later
-        robust.fit(dataframe)
-        data_norm = robust.transform(dataframe)
-
-        return data_norm, robust
+        scaler_gtr = RobustScaler(copy=True)  #save for retransform later
+        scaler_gtr.fit(dataframe)
+        data_norm = scaler_gtr.transform(dataframe)
 
     if mode == 'min_max':
         from sklearn.preprocessing import MinMaxScaler
-        minmax = MinMaxScaler(feature_range=(0, 1), copy=True)  #save for retransform later
-        minmax.fit(dataframe)
-        data_norm = minmax.transform(dataframe)
+        scaler_gtr = MinMaxScaler(feature_range=(0, 1), copy=True)  #save for retransform later
+        scaler_gtr.fit(dataframe)
+        data_norm = scaler_gtr.transform(dataframe)
 
-        return data_norm, minmax
     if mode == 'std':
         from sklearn.preprocessing import StandardScaler
-        stdscaler = StandardScaler(copy=True, with_mean=True, with_std=True)
-        stdscaler.fit(dataframe)
-        data_norm = stdscaler.transform(dataframe)
+        scaler_gtr = StandardScaler(copy=True, with_mean=True, with_std=True)
+        scaler_gtr.fit(dataframe)
+        data_norm = scaler_gtr.transform(dataframe)
+    
+    if ignored_cols:
+        data_norm[:, ignored_cols] = dataframe[:, ignored_cols]
+    
+    return data_norm, scaler_gtr
 
-        return data_norm, stdscaler
 
-
-def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[], cols_gt=[],mode='std'):
+def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[], cols_gt=[],mode='std',ignored_cols=[]):
     '''
     The function for splitting the data
     '''
-    dataframe, scaler = normalize_data(dataframe, mode)
+    dataframe, scaler = normalize_data(dataframe, mode, ignored_cols)
 
     xs = [] # return input data
     ys = [] # return output data
@@ -59,27 +57,22 @@ def extract_data(dataframe, window_size=5, target_timstep=1, cols_x=[], cols_y=[
             ygt.append(dataframe[i + window_size, cols_gt])
     return np.array(xs), np.array(ys), scaler, np.array(ygt)
 
-def transform_ssa(input, n, sigma_lst):
-    print(input.shape)
+def transform_ssa(input, n, sigma_lst, ignored_cols=[]):
+    print("transform_ssa", input.shape)
     step = input.shape[0]
-    qs = []
-    hs = []
-    for i in range(step):
-        lst_H_ssa = SSA(input[i, :, 0], n)
-        lst_Q_ssa = SSA(input[i, :, 1], n)
-        q_comp = lst_Q_ssa.TS_comps
-        h_comp = lst_H_ssa.TS_comps
+    nfeat = input.shape[-1]
+    for feat in range(nfeat):
+        if feat in ignored_cols:
+            continue
+        feat_ssa = []
+        for i in range(step):
+            lst_ssa = SSA(input[i, :, feat], n)
+            feat_merged = lst_ssa.reconstruct(sigma_lst)
+            feat_ssa.append(feat_merged)
+        input[:, :, feat] = np.array(feat_ssa)
 
-        q_merged = lst_Q_ssa.reconstruct(sigma_lst)
-        h_merged = lst_H_ssa.reconstruct(sigma_lst)
-        qs.append(q_merged)
-        hs.append(h_merged)
-    
-    qs = np.array(qs)
-    hs = np.array(hs)
-    result = np.concatenate((qs[:,:, np.newaxis], hs[:,:, np.newaxis]), axis=2)
-    print(result.shape)
-    return result
+    print("transform_ssa", input.shape)
+    return input
     
 def ssa_extract_data(gtruth, q_ssa, h_ssa, window_size=7, target_timstep=1, mode='std'):
     '''

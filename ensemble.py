@@ -64,6 +64,7 @@ class Ensemble:
         self.cols_x = self._data_kwargs.get('cols_x')
         self.cols_y = self._data_kwargs.get('cols_y')
         self.cols_gt = self._data_kwargs.get('cols_gt')
+        self.ignored_cols = self._data_kwargs.get('ignored_cols')
         self.pred_factor = self._data_kwargs.get('pred_factor')
         self.target_timestep = self._data_kwargs.get('target_timestep')
         self.window_size = self._data_kwargs.get('window_size')
@@ -103,7 +104,7 @@ class Ensemble:
         '''
         # dat = get_input_data(self.data_file, self.default_n, self.sigma_lst)
         dat = pd.read_csv(self.data_file, header=0)
-        dat = dat[['Q', 'H']]
+        dat = dat[['Q', 'H', 'day_sin', 'day_cos']]
         dat = dat.to_numpy()
         # QH_stacked, Q_comps, H_comps  = get_ssa_data(self.data_file, self.default_n)
 
@@ -122,7 +123,7 @@ class Ensemble:
                                                 cols_x=self.cols_x, cols_y=self.cols_y,
                                                 cols_gt=self.cols_gt, mode=self.norm_method)
 
-            xq = transform_ssa(xq, self.default_n, self.sigma_lst)
+            xq = transform_ssa(xq, self.default_n, self.sigma_lst, self.ignored_cols)
                                                 
             # xq, xh, scaler, y_gt = ssa_extract_data(gtruth=QH_stacked,
             #                                         q_ssa=Q_comps,
