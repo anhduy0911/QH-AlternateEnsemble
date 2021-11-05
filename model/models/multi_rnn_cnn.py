@@ -32,7 +32,7 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     rnn_out_3 = rnn_3(rnn_out_1, initial_state=[state_h, state_c])
 
     attention = Attention()
-    context_vec = attention([rnn_out_3, state_h])
+    context_vec = attention([rnn_out_3, rnn_out_1])
     context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, rnn_out_3])
     Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
     attention_vec = Wc(context_and_rnn_2_out)

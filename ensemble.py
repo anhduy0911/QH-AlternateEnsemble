@@ -303,7 +303,7 @@ class Ensemble:
         # Attention
         # Using rnn_2_out as query and state_h as values
         attention = Attention()
-        context_vec = attention([rnn_2_out, state_h])
+        context_vec = attention([rnn_2_out, rnn_1_out])
         context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, rnn_2_out])
         Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
         attention_vec = Wc(context_and_rnn_2_out)
