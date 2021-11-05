@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Conv1D, Input, Bidirectional, LSTM, Concatenate, Reshape, TimeDistributed, Dense, Attention
+from tensorflow.keras.layers import Conv1D, Input, BatchNormalization, LSTM, Concatenate, RepeatVector, TimeDistributed, Dense, Attention
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.optimizers import Adam, Adadelta, RMSprop
@@ -24,12 +24,12 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
 
     # rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(input)
     rnn_out_1, state_h, state_c = rnn_1(conv_out)
-    # state_h = Concatenate(axis=-1)([forward_h, backward_h])
-    # state_c = Concatenate(axis=-1)([forward_c, backward_c])
-
+    state_h = BatchNormalization(momentum=0.6)(state_h)
+    state_c = BatchNormalization(momentum=0.6)(state_c)
+    rnn_3_input = RepeatVector(window_size)(state_h)
     rnn_3 = LSTM(units=opt['lstm']['si_unit'][index], return_sequences=True, return_state=False, 
                 dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
-    rnn_out_3 = rnn_3(rnn_out_1, initial_state=[state_h, state_c])
+    rnn_out_3 = rnn_3(rnn_3_input, initial_state=[state_h, state_c])
 
     attention = Attention()
     context_vec = attention([rnn_out_3, rnn_out_1])

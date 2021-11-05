@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from tensorflow.keras.layers import Dense, Input, Bidirectional, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed, MultiHeadAttention, Attention
+from tensorflow.keras.layers import Dense, Input, BatchNormalization, LSTM, RepeatVector, Concatenate, Conv1D, TimeDistributed, MultiHeadAttention, Attention
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 
@@ -289,8 +289,8 @@ class Ensemble:
                 recurrent_dropout=self.dropout)
         # rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(input_val_x)
         rnn_1_out, state_h, state_c = rnn_1(conv_out2)
-        # state_h = Concatenate(axis=-1)([forward_h, backward_h])
-        # state_c = Concatenate(axis=-1)([forward_c, backward_c])
+        state_h = BatchNormalization(momentum=0.6)(state_h)
+        state_c = BatchNormalization(momentum=0.6)(state_c)
 
         # conv_att = Conv1D(filters=64, activation='relu', kernel_size=self.window_size - self.target_timestep + 1)
         # key_value = conv_att(rnn_1_out)
