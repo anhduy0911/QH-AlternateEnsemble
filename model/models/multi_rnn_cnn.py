@@ -33,7 +33,7 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     attention = Attention()
     Wc = Dense(units=opt['lstm']['bi_unit'][index] * 2, activation=tf.math.tanh, use_bias=False)
     for _ in range(target_timestep):
-        output, states = decoder_cell(decoder_inp, initial_state=states)
+        output, states = decoder_cell(decoder_inp, states=states)
         context_vec = attention([output, rnn_out_1])
         context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, output])
         attention_vec = Wc(context_and_rnn_2_out)

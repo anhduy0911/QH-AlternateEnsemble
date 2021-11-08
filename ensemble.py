@@ -285,7 +285,7 @@ class Ensemble:
         dense_3 = Dense(units=128, activation=tf.math.tanh, use_bias=False)
         for i in range(self.target_timestep):
             decoder_inp = dense_3(input_submodel[:, i, :])
-            output, states = decoder_cell(decoder_inp, initial_state=states)
+            output, states = decoder_cell(decoder_inp, states=states)
             context_vec = attention([output, rnn_1_out])
             context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, output])
             attention_vec = Wc(context_and_rnn_2_out)
