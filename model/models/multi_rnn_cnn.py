@@ -45,15 +45,13 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     predictions = tf.stack(predictions)
     # predictions.shape => (batch, time, features)
     predictions = tf.squeeze(tf.transpose(predictions, [2, 1, 0, 3]), axis=0)
-    conv_3 = Conv1D(filters=opt['conv']['n_kernels'][index][2], activation='relu',
-                kernel_size=window_size - target_timestep + 1)
-    conv_out_3 = conv_3(predictions)
+
     # out_att_vec = attention_vec[:, -target_timestep:]
 
     dense_3 = TimeDistributed(Dense(units=output_dim))
     
     # print(rnn_out_3.shape)
-    outs = dense_3(conv_out_3)
+    outs = dense_3(predictions)
     # print(outs.shape)
     model = Model(inputs=input, outputs=outs)
 

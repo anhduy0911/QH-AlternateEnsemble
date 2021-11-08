@@ -297,7 +297,7 @@ class Ensemble:
         # predictions.shape => (batch, time, features)
         predictions = tf.squeeze(tf.transpose(predictions, [2, 1, 0, 3]), axis=0)
         dense_4 = TimeDistributed(Dense(units=self.output_dim))
-        output = dense_4(attention_vec)
+        output = dense_4(predictions)
 
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
