@@ -34,16 +34,17 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     Wc = Dense(units=opt['lstm']['bi_unit'][index] * 2, activation=tf.math.tanh, use_bias=False)
     for _ in range(target_timestep):
         output, states = decoder_cell(decoder_inp, states=states)
+        output = tf.expand_dims(output, axis=1) # shape (batch, 1, hidden_size)
         context_vec = attention([output, rnn_out_1])
         context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, output])
         attention_vec = Wc(context_and_rnn_2_out)
-        decoder_inp = attention_vec
+        decoder_inp = tf.squeeze(attention_vec, axis=1)
         predictions.append(attention_vec)
 
     # predictions.shape => (time, batch, features)
     predictions = tf.stack(predictions)
     # predictions.shape => (batch, time, features)
-    predictions = tf.transpose(predictions, [1, 0, 2])
+    predictions = tf.squeeze(tf.transpose(predictions, [2, 1, 0, 3]), axis=0)
     conv_3 = Conv1D(filters=opt['conv']['n_kernels'][index][2], activation='relu',
                 kernel_size=window_size - target_timestep + 1)
     conv_out_3 = conv_3(predictions)

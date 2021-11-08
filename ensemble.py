@@ -286,11 +286,16 @@ class Ensemble:
         for i in range(self.target_timestep):
             decoder_inp = dense_3(input_submodel[:, i, :])
             output, states = decoder_cell(decoder_inp, states=states)
+            output = tf.expand_dims(output, axis=1) # shape (batch, 1, hidden_size)
             context_vec = attention([output, rnn_1_out])
             context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, output])
             attention_vec = Wc(context_and_rnn_2_out)
             predictions.append(attention_vec)
 
+        # predictions.shape => (time, batch, features)
+        predictions = tf.stack(predictions)
+        # predictions.shape => (batch, time, features)
+        predictions = tf.squeeze(tf.transpose(predictions, [2, 1, 0, 3]), axis=0)
         dense_4 = TimeDistributed(Dense(units=self.output_dim))
         output = dense_4(attention_vec)
 
