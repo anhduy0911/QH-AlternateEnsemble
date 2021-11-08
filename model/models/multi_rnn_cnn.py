@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Conv1D, Input, Bidirectional, LSTM, Concatenate, Reshape, TimeDistributed, Dense, Attention
+from tensorflow.keras.layers import Conv1D, Input, LSTMCell, LSTM, Concatenate, Reshape, TimeDistributed, Dense, Attention
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.optimizers import Adam, Adadelta, RMSprop
@@ -24,22 +24,29 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
 
     # rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(input)
     rnn_out_1, state_h, state_c = rnn_1(conv_out)
-    # state_h = Concatenate(axis=-1)([forward_h, backward_h])
-    # state_c = Concatenate(axis=-1)([forward_c, backward_c])
-
-    rnn_3 = LSTM(units=opt['lstm']['si_unit'][index], return_sequences=True, return_state=False, 
+    states = [state_h, state_c]
+    decoder_inp = state_h
+    decoder_cell = LSTMCell(units=opt['lstm']['si_unit'][index], 
                 dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
-    rnn_out_3 = rnn_3(rnn_out_1, initial_state=[state_h, state_c])
 
+    predictions = []
     attention = Attention()
-    context_vec = attention([rnn_out_3, state_h])
-    context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, rnn_out_3])
-    Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
-    attention_vec = Wc(context_and_rnn_2_out)
+    Wc = Dense(units=opt['lstm']['bi_unit'][index] * 2, activation=tf.math.tanh, use_bias=False)
+    for _ in range(target_timestep):
+        output, states = decoder_cell(decoder_inp, initial_state=states)
+        context_vec = attention([output, rnn_out_1])
+        context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, output])
+        attention_vec = Wc(context_and_rnn_2_out)
+        decoder_inp = attention_vec
+        predictions.append(attention_vec)
 
+    # predictions.shape => (time, batch, features)
+    predictions = tf.stack(predictions)
+    # predictions.shape => (batch, time, features)
+    predictions = tf.transpose(predictions, [1, 0, 2])
     conv_3 = Conv1D(filters=opt['conv']['n_kernels'][index][2], activation='relu',
                 kernel_size=window_size - target_timestep + 1)
-    conv_out_3 = conv_3(attention_vec)
+    conv_out_3 = conv_3(predictions)
     # out_att_vec = attention_vec[:, -target_timestep:]
 
     dense_3 = TimeDistributed(Dense(units=output_dim))

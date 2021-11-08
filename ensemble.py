@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from tensorflow.keras.layers import Dense, Input, Bidirectional, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed, MultiHeadAttention, Attention
+from tensorflow.keras.layers import Dense, Input, LSTMCell, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed, MultiHeadAttention, Attention
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 
@@ -265,53 +265,31 @@ class Ensemble:
         conv2 = Conv1D(filters=64, kernel_size=3, padding='same', activation='relu')
         conv_out2 = conv2(conv_out)
 
-        # rnn_att = LSTM(units=self.input_dim, return_sequences=True, return_state=False)
-        # component_att_weight = softmax(rnn_att(input_val_x), axis=-1)
-        # weighted_input = tf.math.multiply(input_val_x, component_att_weight)
-        # sum_input = tf.math.reduce_sum(weighted_input, axis=2, keepdims=True)
-        # attention_in = Attention()
-        # context_vec = attention_in([input_val_x, input_val_x])
-        # Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
-        # attention_vec = Wc(context_vec)
-        # sum_input = Dense(units=2, use_bias=False)(attention_vec)
-
-        # rnn_1 = Bidirectional(
-        #     LSTM(units=64,
-        #          return_sequences=True,
-        #          return_state=True,
-        #          dropout=self.dropout,
-        #          recurrent_dropout=self.dropout))
         rnn_1 = LSTM(units=128,
                 return_sequences=True,
                 return_state=True,
                 dropout=self.dropout,
                 recurrent_dropout=self.dropout)
-        # rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(input_val_x)
+
         rnn_1_out, state_h, state_c = rnn_1(conv_out2)
-        # state_h = Concatenate(axis=-1)([forward_h, backward_h])
-        # state_c = Concatenate(axis=-1)([forward_c, backward_c])
+        states = [state_h, state_c]
 
-        # conv_att = Conv1D(filters=64, activation='relu', kernel_size=self.window_size - self.target_timestep + 1)
-        # key_value = conv_att(rnn_1_out)
-        rnn_2 = LSTM(units=128,return_sequences=True)
-        rnn_2_out = rnn_2(input_submodel,initial_state=[state_h,state_c])
-
-        # rnn_2 = LSTM(units=128, return_sequences=True, dropout=self.dropout, recurrent_dropout=self.dropout)
-        # rnn_2_out = rnn_2(weighed_input, initial_state=[state_h, state_c])
-
-        # Attention
-        # Using rnn_2_out as query and state_h as values
+        decoder_cell = LSTMCell(
+            units=128,
+            dropout=self.dropout,
+            recurrent_dropout=self.dropout)
+        
+        predictions = []
         attention = Attention()
-        context_vec = attention([rnn_2_out, state_h])
-        context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, rnn_2_out])
         Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
-        attention_vec = Wc(context_and_rnn_2_out)
-
-        # attention = MultiHeadAttention(self.child_config['num'], 2)
-        # context_vec = attention(rnn_2_out, tf.expand_dims(state_h, axis=1))
-        # context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, rnn_2_out])
-        # Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
-        # attention_vec = Wc(context_and_rnn_2_out)
+        dense_3 = Dense(units=128, activation=tf.math.tanh, use_bias=False)
+        for i in range(self.target_timestep):
+            decoder_inp = dense_3(input_submodel[:, i, :])
+            output, states = decoder_cell(decoder_inp, initial_state=states)
+            context_vec = attention([output, rnn_1_out])
+            context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, output])
+            attention_vec = Wc(context_and_rnn_2_out)
+            predictions.append(attention_vec)
 
         dense_4 = TimeDistributed(Dense(units=self.output_dim))
         output = dense_4(attention_vec)
