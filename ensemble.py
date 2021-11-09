@@ -452,6 +452,18 @@ class Ensemble:
             print('SAVING CSV...')
             total_frame.to_csv('./log/data_analysis/predict_val_{}.csv'.format(i), index=None)
 
+    def predict_whole_dataset(self):
+        '''
+        predict the whole dataset
+        '''
+        pred = self.outer_model.predict(x=[self.data['x_test_out_submodel'], self.data['x_test_out']], 
+                                        batch_size=self.batch_size)
+        
+        # print(pred.shape) 
+        # print(self.data['y_test_out'].shape)   
+        
+        return pred
+
     def evaluate_model(self):
         '''
         Run evaluation
@@ -537,6 +549,7 @@ if __name__ == '__main__':
         model.train_model_outer()
         model.retransform_prediction()
         model.evaluate_model()
+        model.predict_whole_dataset()
         # model.multistep_prediction()
     else:
         raise RuntimeError('Mode must be train or test!')
