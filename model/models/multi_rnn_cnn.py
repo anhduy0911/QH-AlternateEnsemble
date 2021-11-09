@@ -5,9 +5,9 @@ from tensorflow.keras.optimizers import Adam, Adadelta, RMSprop
 from tensorflow.keras.activations import softmax
 import numpy as np
 import tensorflow as tf 
-from utils.custom_losses import shrinkage_loss
+from utils.custom_losses import shrinkage_loss, linex_loss, fair_weight_mse
 
-def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_timestep=1):
+def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_timestep=1, mean=0, std=1):
     ''' 
     build the (index)th child model base on given param set
     '''
@@ -58,7 +58,7 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     if opt['loss'] != 'custom':
         model.compile(loss=opt['loss'], optimizer=optimizer, metrics=['mae', 'mape'])
     else:
-        model.compile(loss=shrinkage_loss, optimizer=optimizer, metrics=['mae', 'mape'])
+        model.compile(loss=fair_weight_mse(mean=mean, sd=std), optimizer=optimizer, metrics=['mae', 'mape'])
 
     return model
 

@@ -22,6 +22,14 @@ def linex_loss(y_pred, y_gt):
     linear = alpha * diff
     return be.clip(exp - linear - 1, 1e-7, 1e7)
 
+
+def fair_weight_mse(mean, sd):
+    def f_loss(y_gt, y_pred):
+        weight = sd / be.abs(y_gt - mean)
+        return be.square(y_pred - y_gt) * weight
+
+    return f_loss
+
 # def linex_loss(y_pred, y_gt):
 #     # alpha = -0.01
 #     diff = y_pred - y_gt

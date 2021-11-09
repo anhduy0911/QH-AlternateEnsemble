@@ -16,7 +16,7 @@ from utils.ssa import SSA
 from utils.reprocess_daily import ssa_extract_data, extract_data, transform_ssa
 from utils.data_loader import get_ssa_data, get_input_data
 from tensorflow.keras.activations import softmax
-from utils.custom_losses import shrinkage_loss, linex_loss
+from utils.custom_losses import fair_weight_mse, shrinkage_loss, linex_loss
 
 
 def getMonth(_str):
@@ -101,6 +101,7 @@ class Ensemble:
         test_in: data use for TRAIN main model
         test_out: data use for actual test of the total system 
         '''
+
         # dat = get_input_data(self.data_file, self.default_n, self.sigma_lst)
         dat = pd.read_csv(self.data_file, header=0)
         dat = dat[['Q', 'H']]
@@ -148,6 +149,9 @@ class Ensemble:
                 data["y_" + cat] = y_gt
 
         data['scaler'] = scaler
+        data['mean'] = x_train_in.mean(axis=1).mean(axis=0)
+        data['std'] = x_train_in.std(axis=1).mean(axis=0)
+        
         return data
 
     def plot_data_processed(self, x, y):
@@ -170,7 +174,7 @@ class Ensemble:
         for i in range(self.child_config['num']):
             if self.model_kind == 'rnn_cnn':
                 from model.models.multi_rnn_cnn import model_builder
-                model = model_builder(i, self.child_config, self.input_dim, self.output_dim, self.window_size, self.time_step_eval)
+                model = model_builder(i, self.child_config, self.input_dim, self.output_dim, self.window_size, self.time_step_eval, mean=self.data['mean'], std=self.data['std'])
                 models.append(model)
 
         print(models[0].summary())
@@ -207,7 +211,8 @@ class Ensemble:
             for i in range(self.child_config['num']):
                 # for epoch in range(self.epoch_min, self.epoch_max + 1, self.epoch_step):
                 if self.model_kind == 'rnn_cnn':
-                    self.inner_models[i].load_weights(self.log_dir + f'ModelPool/best_model_{self.pred_factor}_{i}.hdf5')
+                    self.inner_models[i].load_weights(self.log_dir + f'ModelPool/best_model_{self.pred_factor}_{i}.hdf5', 
+                                                    custom_objects={'loss': fair_weight_mse(mean=self.data['mean'], sd=self.data['std'])})
                 
                 train, test = self.predict_in(i)
                 x_train_out[:, :, i, :] = train
@@ -265,16 +270,6 @@ class Ensemble:
         conv2 = Conv1D(filters=64, kernel_size=3, padding='same', activation='relu')
         conv_out2 = conv2(conv_out)
 
-        # rnn_att = LSTM(units=self.input_dim, return_sequences=True, return_state=False)
-        # component_att_weight = softmax(rnn_att(input_val_x), axis=-1)
-        # weighted_input = tf.math.multiply(input_val_x, component_att_weight)
-        # sum_input = tf.math.reduce_sum(weighted_input, axis=2, keepdims=True)
-        # attention_in = Attention()
-        # context_vec = attention_in([input_val_x, input_val_x])
-        # Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
-        # attention_vec = Wc(context_vec)
-        # sum_input = Dense(units=2, use_bias=False)(attention_vec)
-
         # rnn_1 = Bidirectional(
         #     LSTM(units=64,
         #          return_sequences=True,
@@ -318,7 +313,7 @@ class Ensemble:
 
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
-        model.compile(loss=linex_loss, optimizer=optimizer, metrics=['mae', 'mape'])
+        model.compile(loss=fair_weight_mse(mean=self.data['mean'], sd=self.data['std']), optimizer=optimizer, metrics=['mae', 'mape'])
 
         model.summary()
         return model
@@ -353,7 +348,8 @@ class Ensemble:
                 self.plot_training_history(history)
 
         elif self.mode == 'test':
-            self.outer_model.load_weights(self.log_dir + 'best_model.hdf5')
+            self.outer_model.load_weights(self.log_dir + 'best_model.hdf5',
+                                        custom_objects={'loss': fair_weight_mse(mean=self.data['mean'], sd=self.data['std'])})
             print('Load weight from ' + self.log_dir)
 
 
