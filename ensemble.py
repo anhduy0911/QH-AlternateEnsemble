@@ -151,6 +151,8 @@ class Ensemble:
         data['scaler'] = scaler
         data['mean'] = x_train_in.mean(axis=1).mean(axis=0)
         data['std'] = x_train_in.std(axis=1).mean(axis=0)
+
+        print(f'mean: {data["mean"]}, std: {data["std"]}')
         
         return data
 

@@ -1,7 +1,7 @@
 import tensorflow.keras.backend as be 
 import tensorflow as tf
 
-def shrinkage_loss(y_pred, y_gt):
+def shrinkage_loss(y_gt, y_pred):
     a = 5
     c = 0.1
     diff = be.abs(y_pred - y_gt)
@@ -25,9 +25,25 @@ def linex_loss(y_pred, y_gt):
 
 def fair_weight_mse(mean, sd):
     def f_loss(y_gt, y_pred):
-        weight = sd / be.abs(y_gt - mean)
-        return be.square(y_pred - y_gt) * weight
-
+        a = 2
+        diff = be.abs(mean - y_gt)
+        weight = 1 / (be.exp(a * diff))
+        return be.square(y_gt - y_pred) * weight
+    def linex_loss(y_gt, y_pred):
+      # weight = be.exp(be.abs(y_gt - mean) / sd)
+      a = 2
+      c = 0.1
+      diff = be.abs(mean - y_gt)
+      weight = 1 / (be.exp(a * diff))
+      # l2 = be.square(diff)
+      # beta = 0
+      # weight = beta * sd / be.abs(y_gt - mean)
+      alpha = -0.1
+      diff = y_pred - y_gt
+      # diff = y_pred / y_gt - 1
+      exp = be.exp(alpha * diff)
+      linear = alpha * diff
+      return be.clip((exp - linear - 1) * weight, 1e-10, 1e10) 
     return f_loss
 
 # def linex_loss(y_pred, y_gt):
