@@ -13,19 +13,35 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     '''
     input = Input(shape=(None, input_dim))
 
+    input = tf.transpose(input, perm=[0, 2, 1])
+
+    encoder_cell = LSTMCell(units=window_size,
+                    dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
+    states_encoder_h, states_encoder_c = encoder_cell.get_initial_state(input)
+    encoder_att = Attention()
+    encoder_outputs = []
+    for t in range(2):
+        merged_input = encoder_att([states_encoder_h, input])
+        en_out, states_encoder_h, states_encoder_c = encoder_cell(merged_input[:,0,:], [states_encoder_h, states_encoder_c])
+        encoder_outputs.append(en_out)
+    
+    # 2, batch_size, window_size
+    encoder_outputs = tf.stack(encoder_outputs)
+    rnn_out_1 = tf.transpose(tf.transpose(encoder_outputs, perm=[1, 0, 2]), perm=[0, 2, 1])
     # conv = Conv1D(filters=opt['conv']['n_kernels'][index][0], kernel_size=opt['conv']['kernel_s'][index][0], activation='relu', padding='same')
     # conv_out = conv(input)
-
+    states = [states_encoder_h, states_encoder_c]
     # conv2 = Conv1D(filters=opt['conv']['n_kernels'][index][1], kernel_size=opt['conv']['kernel_s'][index][1], activation='relu', padding='same')
     # conv_out2 = conv2(conv_out)
 
-    rnn_1 = LSTM(units=opt['lstm']['bi_unit'][index] * 2, return_sequences=True, return_state=True, 
-            dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
+    # rnn_1 = LSTM(units=opt['lstm']['bi_unit'][index] * 2, return_sequences=True, return_state=True, 
+    #         dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
 
-    # rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(input)
-    rnn_out_1, state_h, state_c = rnn_1(input)
-    states = [state_h, state_c]
-    decoder_inp = state_h
+    # # rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(input)
+    # rnn_out_1, state_h, state_c = rnn_1(input)
+    # states = [state_h, state_c]
+    # decoder_inp = state_h
+    decoder_inp = states_encoder_h
     decoder_cell = LSTMCell(units=opt['lstm']['si_unit'][index], 
                 dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
     predictions = []
