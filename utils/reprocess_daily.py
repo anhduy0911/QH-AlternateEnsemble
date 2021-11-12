@@ -64,21 +64,34 @@ def transform_ssa(input, n, sigma_lst):
     step = input.shape[0]
     qs = []
     hs = []
+    sigmas_q = []
+    sigmas_h = []
     for i in range(step):
-        lst_H_ssa = SSA(input[i, :, 0], n)
-        lst_Q_ssa = SSA(input[i, :, 1], n)
+        lst_H_ssa = SSA(input[i, :, 1], n)
+        lst_Q_ssa = SSA(input[i, :, 0], n)
         q_comp = lst_Q_ssa.TS_comps
         h_comp = lst_H_ssa.TS_comps
 
+        sigma_q = lst_Q_ssa.get_lst_sigma()
+        sigma_h = lst_H_ssa.get_lst_sigma()
         # q_merged = lst_Q_ssa.reconstruct(sigma_lst)
         # h_merged = lst_H_ssa.reconstruct(sigma_lst)
         qs.append(q_comp)
         hs.append(h_comp)
+
+        sigmas_q.append(sigma_q)
+        sigmas_h.append(sigma_h)
     
     qs = np.array(qs)
     hs = np.array(hs)
+    sigmas_q = np.array(sigmas_q)
+    sigmas_h = np.array(sigmas_h)
+
     result = np.concatenate((qs, hs), axis=2)
-    print(result.shape)
+    sigmas = np.concatenate((sigmas_q, sigmas_h), axis=2)
+    print(f'result: {result.shape}')
+    print(f'sigma: {sigmas.shape}')
+
     return result
     
 def ssa_extract_data(gtruth, q_ssa, h_ssa, window_size=7, target_timstep=1, mode='std'):
@@ -137,5 +150,4 @@ def roll_data(dataframe, cols_x, cols_y, mode='min_max'):
     y = dataframe[:, cols_y]
 
     return X, y, scaler
-
 

@@ -122,7 +122,7 @@ class Ensemble:
                                                 cols_x=self.cols_x, cols_y=self.cols_y,
                                                 cols_gt=self.cols_gt, mode=self.norm_method)
 
-            xq = transform_ssa(xq, self.default_n, self.sigma_lst)
+            xq, _ = transform_ssa(xq, self.default_n, self.sigma_lst)
                                                 
             # xq, xh, scaler, y_gt = ssa_extract_data(gtruth=QH_stacked,
             #                                         q_ssa=Q_comps,
