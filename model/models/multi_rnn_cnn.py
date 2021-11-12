@@ -13,8 +13,8 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     '''
     input = Input(shape=(None, input_dim))
 
-    conv = Conv1D(filters=opt['conv']['n_kernels'][index][0], kernel_size=opt['conv']['kernel_s'][index][0], activation='relu', padding='same')
-    conv_out = conv(input)
+    # conv = Conv1D(filters=opt['conv']['n_kernels'][index][0], kernel_size=opt['conv']['kernel_s'][index][0], activation='relu', padding='same')
+    # conv_out = conv(input)
 
     # conv2 = Conv1D(filters=opt['conv']['n_kernels'][index][1], kernel_size=opt['conv']['kernel_s'][index][1], activation='relu', padding='same')
     # conv_out2 = conv2(conv_out)
@@ -23,12 +23,11 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
             dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
 
     # rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(input)
-    rnn_out_1, state_h, state_c = rnn_1(conv_out)
+    rnn_out_1, state_h, state_c = rnn_1(input)
     states = [state_h, state_c]
     decoder_inp = state_h
     decoder_cell = LSTMCell(units=opt['lstm']['si_unit'][index], 
                 dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
-
     predictions = []
     attention = Attention()
     Wc = Dense(units=opt['lstm']['bi_unit'][index] * 2, activation=tf.math.tanh, use_bias=False)
