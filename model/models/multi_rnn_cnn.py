@@ -12,43 +12,23 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     build the (index)th child model base on given param set
     '''
     input = Input(shape=(window_size, input_dim))
+    input_s = Input(shape=(window_size, output_dim))
 
-    input_t = tf.transpose(input, perm=[0, 2, 1])
-
-    encoder_cell = LSTMCell(units=window_size,
-                    dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
-    states_encoder_h, states_encoder_c = input_t[:, 0, :], input_t[:, 0, :]
-    # print(states_encoder_h.shape)
-    # print(input_t.shape)
-    encoder_att = Attention()
-    encoder_outputs = []
-    for t in range(opt['lstm']['si_unit'][index]):
-        # batch, 1, window-size
-        query = tf.expand_dims(states_encoder_h, axis=1)
-        merged_input = encoder_att([query, input_t])
-        print(merged_input.shape)
-        en_out, (states_encoder_h, states_encoder_c) = encoder_cell(tf.squeeze(merged_input, axis=1), states=[states_encoder_h, states_encoder_c])
-        encoder_outputs.append(en_out)
-    
-    # 2, batch_size, window_size
-    encoder_outputs = tf.stack(encoder_outputs)
-    rnn_out_1 = tf.transpose(tf.transpose(encoder_outputs, perm=[1, 0, 2]), perm=[0, 2, 1])
-    # conv = Conv1D(filters=opt['conv']['n_kernels'][index][0], kernel_size=opt['conv']['kernel_s'][index][0], activation='relu', padding='same')
-    # conv_out = conv(input)
-    # print(rnn_out_1.shape)
-    states = [states_encoder_h, states_encoder_c]
     # conv2 = Conv1D(filters=opt['conv']['n_kernels'][index][1], kernel_size=opt['conv']['kernel_s'][index][1], activation='relu', padding='same')
     # conv_out2 = conv2(conv_out)
+    attention_input = Attention()
+    input_merged = attention_input([input_s.transpose(0,2,1), input.transpose(0,2,1)])
+    input_merged = tf.transpose(input_merged, perm=[0,2,1])
 
-    # rnn_1 = LSTM(units=opt['lstm']['bi_unit'][index] * 2, return_sequences=True, return_state=True, 
-    #         dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
+    rnn_1 = LSTM(units=opt['lstm']['bi_unit'][index] * 2, return_sequences=True, return_state=True, 
+            dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
 
     # # # rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(input)
-    # rnn_out_1, state_h, state_c = rnn_1(encoder_outputs)
+    rnn_out_1, state_h, state_c = rnn_1(input_merged)
     # # print(rnn_out_1.shape)
-    # states = [state_h, state_c]
-    # decoder_inp = state_h
-    decoder_inp = rnn_out_1[:, -1, :]
+    states = [state_h, state_c]
+    decoder_inp = state_h
+
     decoder_cell = LSTMCell(units=opt['lstm']['si_unit'][index], 
                 dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
     predictions = []
@@ -75,7 +55,7 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     # print(rnn_out_3.shape)
     outs = dense_3(predictions)
     # print(outs.shape)
-    model = Model(inputs=input, outputs=outs)
+    model = Model(inputs=[input, input_s], outputs=outs)
 
     if opt['optimizer'] == 'rmsprop':
         optimizer = RMSprop(learning_rate=opt['lr'][index])
@@ -91,7 +71,7 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     return model
 
 
-def train_model(model, index, x_train, y_train, batch_size, epochs, fraction=0.1, patience=0, early_stop=False, save_dir='', pred_factor='q'):
+def train_model(model, index, x_train, s_train, y_train, batch_size, epochs, fraction=0.1, patience=0, early_stop=False, save_dir='', pred_factor='q'):
     callbacks = []
 
     checkpoint = ModelCheckpoint(save_dir + f'best_model_{pred_factor}_{index}.hdf5',
@@ -105,7 +85,7 @@ def train_model(model, index, x_train, y_train, batch_size, epochs, fraction=0.1
         early_stop = EarlyStopping(monitor='val_loss', patience=patience)
         callbacks.append(early_stop)
 
-    history = model.fit(x=x_train,
+    history = model.fit(x=[x_train, s_train],
                         y=y_train,
                         batch_size=batch_size,
                         epochs=epochs,

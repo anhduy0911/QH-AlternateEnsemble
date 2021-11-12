@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats.stats import sigmaclip
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from tensorflow.keras.layers import Dense, Input, LSTMCell, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed, MultiHeadAttention, Attention
 from tensorflow.keras.models import Model
@@ -122,7 +123,7 @@ class Ensemble:
                                                 cols_x=self.cols_x, cols_y=self.cols_y,
                                                 cols_gt=self.cols_gt, mode=self.norm_method)
 
-            xq, _ = transform_ssa(xq, self.default_n, self.sigma_lst)
+            xq, sigma = transform_ssa(xq, self.default_n, self.sigma_lst)
                                                 
             # xq, xh, scaler, y_gt = ssa_extract_data(gtruth=QH_stacked,
             #                                         q_ssa=Q_comps,
@@ -132,19 +133,15 @@ class Ensemble:
             #                                         mode=self.norm_method)
             
             # xq = np.concatenate((xq, xh), axis=2)
-            if self.pred_factor == 'q':
-                x_train_in, y_gt_train_in = xq[:train_inner, :], y_gt[:train_inner,:, :]
-                x_test_in, y_gt_test_in = xq[train_inner:-test_outer, :], y_gt[train_inner:-test_outer,:, :]
-                x_test_out, y_gt_test_out = xq[-test_outer:, :],y_gt[-test_outer:, :, :]
-            else:
-                x_train_in, y_gt_train_in = xh[:train_inner, :], y_gt[:train_inner, :, 1][:,:, np.newaxis]
-                x_test_in, y_gt_test_in = xh[train_inner:-test_outer, :], y_gt[train_inner:-test_outer,:, 1][:,:, np.newaxis]
-                x_test_out, y_gt_test_out = xh[-test_outer:, :],y_gt[-test_outer:,:, 1][:,:, np.newaxis]
-                
+            x_train_in, s_train_in, y_gt_train_in = xq[:train_inner, :], sigma[:train_inner, :], y_gt[:train_inner,:, :]
+            x_test_in, s_test_in, y_gt_test_in = xq[train_inner:-test_outer, :], sigma[train_inner:-test_outer, :], y_gt[train_inner:-test_outer,:, :]
+            x_test_out, s_test_out, y_gt_test_out = xq[-test_outer:, :], sigma[-test_outer:, :] ,y_gt[-test_outer:, :, :]
+          
             for cat in ["train_in", "test_in", "test_out"]:
-                x, y_gt = locals()["x_" + cat], locals()["y_gt_" + cat]
-                print(cat, "x: ", x.shape, "ygtr: ", y_gt.shape)
+                x, s, y_gt = locals()["x_" + cat],locals()["s_" + cat], locals()["y_gt_" + cat]
+                print(cat, "x: ", x.shape, "s: ", s.shape, "ygtr: ", y_gt.shape)
                 data["x_" + cat] = x
+                data["s_" + cat] = s
                 data["y_" + cat] = y_gt
 
         data['scaler'] = scaler
@@ -218,8 +215,8 @@ class Ensemble:
     def predict_in(self, index=0, data=[]):
         if len(data) == 0: # this case for gen train data
             if self.model_kind == 'rnn_cnn':
-                x_train_out = self.inner_models[index].predict(self.data['x_test_in'])
-                x_test_out = self.inner_models[index].predict(self.data['x_test_out'])
+                x_train_out = self.inner_models[index].predict([self.data['x_test_in'], self.data['s_test_in']])
+                x_test_out = self.inner_models[index].predict([self.data['x_test_out'], self.data['s_test_in']])
            
             return x_train_out, x_test_out
         else: # this case when gen data during evaluation
@@ -257,10 +254,15 @@ class Ensemble:
 
         # modify the dim here
         input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
+        input_s = Input(shape=(self.target_timestep, self.output_dim))
         input_val_x = Input(shape=(self.window_size, self.input_dim))
         
+        attention_input = Attention()
+        input_merged = attention_input([input_s.transpose(0,2,1), input_val_x.transpose(0,2,1)])
+        input_merged = tf.transpose(input_merged, perm=[0,2,1])
+
         conv = Conv1D(filters=32, kernel_size=3, padding='same', activation='relu')
-        conv_out = conv(input_val_x)
+        conv_out = conv(input_merged)
 
         conv2 = Conv1D(filters=64, kernel_size=3, padding='same', activation='relu')
         conv_out2 = conv2(conv_out)
@@ -300,7 +302,7 @@ class Ensemble:
         dense_4 = TimeDistributed(Dense(units=self.output_dim))
         output = dense_4(predictions)
 
-        model = Model(inputs=[input_submodel, input_val_x], outputs=output)
+        model = Model(inputs=[input_submodel, input_val_x, input_s], outputs=output)
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
         model.compile(loss=linex_loss, optimizer=optimizer, metrics=['mae', 'mape'])
 
@@ -326,7 +328,7 @@ class Ensemble:
             callbacks.append(early_stop)
             callbacks.append(checkpoint)
 
-            history = self.outer_model.fit(x=[self.data['x_train_out_submodel'], self.data['x_test_in']],
+            history = self.outer_model.fit(x=[self.data['x_train_out_submodel'], self.data['x_test_in'], self.data['s_test_in']],
                                             y=self.data['y_train_out'],
                                             batch_size=self.batch_size,
                                             epochs=self.epochs_out,
@@ -395,7 +397,7 @@ class Ensemble:
         '''
         Mutistep prediction, simutaneously
         '''    
-        pred = self.outer_model.predict(x=[self.data['x_test_out_submodel'], self.data['x_test_out']], 
+        pred = self.outer_model.predict(x=[self.data['x_test_out_submodel'], self.data['x_test_out'], self.data['s_test_out']], 
                                         batch_size=self.batch_size)
         
         # print(pred.shape) 
