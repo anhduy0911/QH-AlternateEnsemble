@@ -72,14 +72,14 @@ def transform_ssa(input, n, sigma_lst):
         q_comp = lst_Q_ssa.TS_comps
         h_comp = lst_H_ssa.TS_comps
 
-        sigma_q = lst_Q_ssa.get_lst_sigma()
+        sigma_q = lst_Q_ssa.get_lst_sigma() # (10,)
         sigma_h = lst_H_ssa.get_lst_sigma()
         # q_merged = lst_Q_ssa.reconstruct(sigma_lst)
         # h_merged = lst_H_ssa.reconstruct(sigma_lst)
         qs.append(q_comp)
         hs.append(h_comp)
 
-        sigmas_q.append(sigma_q)
+        sigmas_q.append(sigma_q)  #(step, 10)
         sigmas_h.append(sigma_h)
     
     qs = np.array(qs)
@@ -88,11 +88,12 @@ def transform_ssa(input, n, sigma_lst):
     sigmas_h = np.array(sigmas_h)
 
     result = np.concatenate((qs, hs), axis=2)
-    sigmas = np.concatenate((sigmas_q, sigmas_h), axis=2)
+    sigmas = np.concatenate((sigmas_q, sigmas_h), axis=1)[:, np.expand_dims, :].tile(reps=(1,step,1))
+    
     print(f'result: {result.shape}')
     print(f'sigma: {sigmas.shape}')
 
-    return result
+    return result, sigmas
     
 def ssa_extract_data(gtruth, q_ssa, h_ssa, window_size=7, target_timstep=1, mode='std'):
     '''

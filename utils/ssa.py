@@ -160,7 +160,7 @@ if __name__=="__main__":
     Q_ssa_L20 = SSA(Q, 20)
 
     lst_sigma = H_ssa_L20.get_lst_sigma()
-
+    print(H_ssa_L20.TS_comps.shape)
     print(lst_sigma.shape)
     # H_ssa = H_ssa_L20.reconstruct([0,1,2,3])
     # df['water_level_modified'] = H_ssa
