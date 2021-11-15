@@ -52,7 +52,7 @@ def reward_func(sigma_index_lst=[1, 2, 3], default_n=10, epoch_num=4):
     child_config['rnn_cnn']['lstm']['si_unit'] = [128 for i in range(epoch_num)]
     child_config['rnn_cnn']['lr'] = [0.0001 for i in range(epoch_num)]
     # train
-    model = Ensemble(mode='train', model_kind='rnn_cnn', child_option=child_config, config=config)
+    model = Ensemble(mode='train', model_kind='rnn_cnn', child_option=child_config, **config)
     model.train_model_outer()
     model.retransform_prediction()
     return model.evaluate_model()
