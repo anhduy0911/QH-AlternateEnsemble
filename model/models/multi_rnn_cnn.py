@@ -13,44 +13,24 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     '''
     input = Input(shape=(window_size, input_dim))
 
-    # conv = Conv1D(filters=64, kernel_size=opt['conv']['kernel_s'][index][0], activation='relu', padding='same')
-    # conv_out = conv(input)
-
-    # conv2 = Conv1D(filters=opt['conv']['n_kernels'][index][1], kernel_size=opt['conv']['kernel_s'][index][1], activation='relu', padding='same')
-    # conv_out2 = conv2(conv_out)
-    # rnn_1 = Bidirectional(
-    #         LSTM(units=opt['lstm']['bi_unit'][index],
-    #              return_sequences=True,
-    #              return_state=True,
-    #              dropout=opt['dropout'][index],
-    #              recurrent_dropout=opt['dropout'][index]))
-
-    rnn_1 = LSTM(units=opt['lstm']['bi_unit'][index] * 2, return_sequences=True, return_state=True, 
+    rnn_1 = LSTM(units=opt['lstm']['bi_unit'][index] * 2, return_sequences=False, return_state=True, 
             dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
 
-    # rnn_out_1, forward_h, forward_c, backward_h, backward_c = rnn_1(input)
     rnn_out_1, state_h, state_c = rnn_1(input)
-    # state_h = Concatenate(axis=-1)([forward_h, backward_h])
-    # state_c = Concatenate(axis=-1)([forward_c, backward_c])
-    
-    # conv = Conv1D(filters=opt['lstm']['si_unit'][index], kernel_size=opt['conv']['kernel_s'][index][0], activation='relu', padding='same')
-    # conv_out = conv(rnn_out_1)
-    
     states = [state_h, state_c]
     decoder_inp = state_h
-    # encoder_context = state_h[:, np.newaxis, :]
     decoder_cell = LSTMCell(units=opt['lstm']['si_unit'][index], 
                 dropout=opt['dropout'][index], recurrent_dropout=opt['dropout'][index])
+
     predictions = []
     attention = Attention()
-    Wc = Dense(units=opt['lstm']['bi_unit'][index] * 2, activation='tanh', use_bias=True)
+    Wc = Dense(units=opt['lstm']['bi_unit'][index] * 2, activation='tanh', use_bias=False)
     
     for _ in range(target_timestep):
         output, states = decoder_cell(decoder_inp, states=states)
         output = tf.expand_dims(output, axis=1) # shape (batch, 1, hidden_size)
         context_vec = attention([output, rnn_out_1])
         context_and_rnn_2_out = Concatenate(axis=-1)([context_vec, output])
-        # last_context = Concatenate(axis=-1)([context_and_rnn_2_out, encoder_context])
         attention_vec = Wc(context_and_rnn_2_out)
         decoder_inp = tf.squeeze(attention_vec, axis=1)
         predictions.append(attention_vec)
@@ -61,7 +41,6 @@ def model_builder(index, opt, input_dim=2, output_dim=2, window_size=30, target_
     predictions = tf.squeeze(tf.transpose(predictions, [2, 1, 0, 3]), axis=0)
 
     # out_att_vec = attention_vec[:, -target_timestep:]
-
     dense_3 = TimeDistributed(Dense(units=output_dim))
     
     # print(rnn_out_3.shape)

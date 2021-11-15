@@ -307,11 +307,14 @@ class Ensemble:
         # predictions.shape => (batch, time, features)
         predictions = tf.squeeze(tf.transpose(predictions, [2, 1, 0, 3]), axis=0)
 
-        # dense_3 = TimeDistributed(Dense(units=16, activation='relu'))
-        # output_3 = dense_3(predictions)
+        dense_3 = TimeDistributed(Dense(units=64, activation='relu'))
+        output_3 = dense_3(predictions)
+
+        # dense_5 = TimeDistributed(Dense(units=32, activation='relu'))
+        # output_5 = dense_5(output_3)
 
         dense_4 = TimeDistributed(Dense(units=self.output_dim))
-        output = dense_4(predictions)
+        output = dense_4(output_3)
 
         model = Model(inputs=[input_submodel, input_val_x], outputs=output)
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
