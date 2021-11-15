@@ -14,7 +14,7 @@ if sys.version_info[0] < 3:
     raise Exception("Python 3 or a more recent version is required.")
 
 
-def get_list_sigma_result(default_n=20):
+def get_list_sigma_result(default_n=10):
     with open('./settings/model/config.yaml', 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -30,33 +30,32 @@ def get_list_sigma_result(default_n=20):
     return lst_sigma_Q
 
 
-def reward_func(sigma_index_lst=[1, 2, 3], default_n=20, epoch_num=4, epoch_min=100, epoch_step=50):
+def reward_func(sigma_index_lst=[1, 2, 3], default_n=10, epoch_num=4):
     '''
     input
     sigma_lst - The component index from the ssa gene for example the gen [0, 1, 0] -> sigma_lst=[1] #the index where gen=1
-    default_n - the window length for ssa - <= N /2 where N is the length of the time series - default 20
-    epoch_num - The number of submodel used
-    epoch_min - Min epoch of submodel
-    epoch_step - number of epoch difference bw 2 submodels
-
+    default_n - the window length for ssa - <= N /2 where N is the length of the time series - default 10
     output
-    a tuple contain 2 value (nse_q, nse_h)
+    a tuple contain 2 value (mse_q, mse_h)
     '''
     K.clear_session()
+    # override setting
+    config['model']['child']['num'] = epoch_num
+    config['model']['child']['epoch'] = [15*i for i in range(1, epoch_num + 1)]
+    config['model']['child']['dropout'] = [0 for i in range(epoch_num)]
+    config['model']['child']['batch_size'] = [128 for i in range(epoch_num)] 
+    config['ssa']['sigma_lst'] = sigma_index_lst
 
-    with open('./settings/model/config.yaml', 'r') as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    child_config['rnn_cnn']['conv']['n_kernels'] = [[32, 32, 128] for i in range(epoch_num)]
+    child_config['rnn_cnn']['conv']['kernel_s'] = [[7, 5, 3] for i in range(epoch_num)]
+    child_config['rnn_cnn']['lstm']['bi_unit'] = [64 for i in range(epoch_num)]
+    child_config['rnn_cnn']['lstm']['si_unit'] = [128 for i in range(epoch_num)]
+    child_config['rnn_cnn']['lr'] = [0.0001 for i in range(epoch_num)]
     # train
-    model = Ensemble(mode='train', model_kind='rnn_cnn', sigma_lst=sigma_index_lst,
-                     default_n=default_n, epoch_num=epoch_num, epoch_min=epoch_min, epoch_step=epoch_step, **config)
+    model = Ensemble(mode='train', model_kind='rnn_cnn', child_option=child_config, config=config)
     model.train_model_outer()
-
-    # test
-    model = Ensemble(mode='test', model_kind='rnn_cnn', sigma_lst=sigma_index_lst,
-                     default_n=default_n, epoch_num=epoch_num, epoch_min=epoch_min, epoch_step=epoch_step, **config)
-    model.train_model_outer()
-    model.retransform_prediction(mode='roll')
-    return model.evaluate_model(mode='roll')
+    model.retransform_prediction()
+    return model.evaluate_model()
 
 
 def fitness(ind):
@@ -66,8 +65,8 @@ def fitness(ind):
             sigma_index_lst.append(i)
     if len(sigma_index_lst) == 0:
         return 100000000
-    fitnesss = reward_func(sigma_index_lst=sigma_index_lst, default_n=20,
-                           epoch_num=ind.n, epoch_min=100, epoch_step=50)[0]
+    fitnesss = reward_func(sigma_index_lst=sigma_index_lst, default_n=10,
+                           epoch_num=ind.n)[0]
     return fitnesss
 
 
@@ -82,26 +81,31 @@ def sigma_init(sigma_input):
 
 
 if __name__ == '__main__':
-    # os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
-    # q = get_list_sigma_result()
+    os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+    q = get_list_sigma_result()
 
-    # sigma = sigma_init(q)
+    with open('./settings/model/config.yaml', 'r') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    with open('./settings/model/child_default.yaml', 'r') as f:
+        child_config = yaml.load(f, Loader=yaml.FullLoader)
 
-    # print("((((((((((((((((((   q   )))))))))))))))))))")
-    # print(q)
-    # print("(((((((((((((((((( sigma )))))))))))))))))))")
-    # print(sigma)
+    sigma = sigma_init(q)
 
-    # pop = GA(sigma, fitness)
-    # pop.run()
+    print("((((((((((((((((((   q   )))))))))))))))))))")
+    print(q)
+    print("(((((((((((((((((( sigma )))))))))))))))))))")
+    print(sigma)
 
-    gene = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0]
-    n = 6
-    sigma_index_lst = []
-    for i in range(len(gene)):
-        if gene[i] == 1:
-            sigma_index_lst.append(i)
-    fitnesss = reward_func(sigma_index_lst=sigma_index_lst, default_n=20,
-                           epoch_num=n, epoch_min=100, epoch_step=50)[0]
-    print(fitnesss)
+    pop = GA(sigma, fitness)
+    pop.run()
+
+    # gene = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0]
+    # n = 6
+    # sigma_index_lst = []
+    # for i in range(len(gene)):
+    #     if gene[i] == 1:
+    #         sigma_index_lst.append(i)
+    # fitnesss = reward_func(sigma_index_lst=sigma_index_lst, default_n=20,
+    #                        epoch_num=n, epoch_min=100, epoch_step=50)[0]
+    # print(fitnesss)
 # test2
