@@ -1,7 +1,7 @@
 import tensorflow.keras.backend as be 
 import tensorflow as tf
 
-def shrinkage_loss(y_pred, y_gt):
+def shrinkage_loss(y_gt, y_pred):
     a = 5
     c = 0.1
     diff = be.abs(y_pred - y_gt)
@@ -10,11 +10,11 @@ def shrinkage_loss(y_pred, y_gt):
 
     return weight * l2
 
-def focal_loss(y_pred, y_gt):
+def focal_loss(y_gt, y_pred):
     diff = be.abs(y_pred - y_gt)
     return be.pow(diff, 3)
 
-def linex_loss(y_pred, y_gt):
+def linex_loss(y_gt, y_pred):
     alpha = -0.1
     diff = y_pred - y_gt
     # diff = y_pred / y_gt - 1

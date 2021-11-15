@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from tensorflow.keras.layers import Dense, Input, LSTMCell, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed, MultiHeadAttention, Attention
+from tensorflow.keras.layers import Dense, Input, LSTMCell, LSTM, Reshape, Concatenate, Conv1D, TimeDistributed, MultiHeadAttention, Attention, Bidirectional
+# from tensorflow_addons.seq2seq import BahdanauAttention as BAttention
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 
@@ -259,11 +260,18 @@ class Ensemble:
         input_submodel = Input(shape=(self.target_timestep, self.output_dim * self.child_config['num']))
         input_val_x = Input(shape=(self.window_size, self.input_dim))
         
-        conv = Conv1D(filters=32, kernel_size=3, padding='same', activation='relu')
+        conv = Conv1D(filters=16, kernel_size=3, padding='same', activation='relu')
         conv_out = conv(input_val_x)
 
-        conv2 = Conv1D(filters=64, kernel_size=3, padding='same', activation='relu')
-        conv_out2 = conv2(conv_out)
+        # conv2 = Conv1D(filters=32, kernel_size=5, padding='same', activation='relu')
+        # conv_out2 = conv2(conv_out)
+
+        # rnn_1 = Bidirectional(
+        #   LSTM(units=128,
+        #         return_sequences=True,
+        #         return_state=True,
+        #         dropout=0,
+        #         recurrent_dropout=0))
 
         rnn_1 = LSTM(units=128,
                 return_sequences=True,
@@ -271,7 +279,10 @@ class Ensemble:
                 dropout=self.dropout,
                 recurrent_dropout=self.dropout)
 
-        rnn_1_out, state_h, state_c = rnn_1(conv_out2)
+        rnn_1_out, state_h, state_c = rnn_1(conv_out)
+        # rnn_1_out, forward_h, forward_c, backward_h, backward_c = rnn_1(input_val_x)
+        # state_h = Concatenate(axis=-1)([forward_h, backward_h])
+        # state_c = Concatenate(axis=-1)([forward_c, backward_c])
         states = [state_h, state_c]
 
         decoder_cell = LSTMCell(
@@ -282,9 +293,7 @@ class Ensemble:
         predictions = []
         attention = Attention()
         Wc = Dense(units=128, activation=tf.math.tanh, use_bias=False)
-        dense_3 = Dense(units=128, activation=tf.math.tanh, use_bias=False)
         for i in range(self.target_timestep):
-            # decoder_inp = dense_3(input_submodel[:, i, :])
             decoder_inp = input_submodel[:, i, :]
             output, states = decoder_cell(decoder_inp, states=states)
             output = tf.expand_dims(output, axis=1) # shape (batch, 1, hidden_size)
@@ -297,6 +306,10 @@ class Ensemble:
         predictions = tf.stack(predictions)
         # predictions.shape => (batch, time, features)
         predictions = tf.squeeze(tf.transpose(predictions, [2, 1, 0, 3]), axis=0)
+
+        # dense_3 = TimeDistributed(Dense(units=16, activation='relu'))
+        # output_3 = dense_3(predictions)
+
         dense_4 = TimeDistributed(Dense(units=self.output_dim))
         output = dense_4(predictions)
 
